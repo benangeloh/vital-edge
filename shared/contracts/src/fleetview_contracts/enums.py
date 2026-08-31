@@ -5,7 +5,7 @@ ini muncul di log, di payload batch, dan sebagai tag InfluxDB, jadi keterbacaann
 lebih berharga daripada kepadatan byte.
 """
 
-from enum import StrEnum
+from enum import IntEnum, StrEnum
 
 __all__ = [
     "KNOWN_MEASUREMENTS",
@@ -13,6 +13,7 @@ __all__ = [
     "BatchStatus",
     "ConnectionState",
     "Quality",
+    "SyncPriority",
     "Transport",
 ]
 
@@ -52,6 +53,23 @@ class AcquisitionSource(StrEnum):
     """Dihasilkan SimulatorAdapter. Tidak boleh muncul di produksi."""
     MANUAL = "manual"
     """Dimasukkan operator lewat Edge Console."""
+
+
+class SyncPriority(IntEnum):
+    """Urutan pengiriman saat bandwidth terbatas.
+
+    IntEnum, bukan StrEnum, karena urutannya yang bermakna: nilai lebih kecil
+    dikirim lebih dulu. Pada link seluler bermeteran, agent bisa dikonfigurasi
+    hanya mengirim sampai prioritas tertentu — data mentah 1 Hz tidak sepadan
+    dengan kuota, alarm mesin sepadan.
+    """
+
+    CRITICAL = 0
+    """Alarm, health event, perubahan status. Selalu dikirim."""
+    SUMMARY = 1
+    """Agregat dan data yang sudah di-downsample."""
+    RAW = 2
+    """Telemetry mentah. Dikorbankan lebih dulu saat bandwidth sempit."""
 
 
 class Transport(StrEnum):

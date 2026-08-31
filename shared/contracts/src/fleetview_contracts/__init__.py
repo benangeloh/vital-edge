@@ -12,6 +12,7 @@ from fleetview_contracts.enums import (
     BatchStatus,
     ConnectionState,
     Quality,
+    SyncPriority,
     Transport,
 )
 from fleetview_contracts.export import ExportedBatch, ExportManifest
@@ -38,6 +39,7 @@ __all__ = [
     "HeartbeatResponse",
     "Quality",
     "Reading",
+    "SyncPriority",
     "SyncState",
     "TelemetryRecord",
     "Transport",

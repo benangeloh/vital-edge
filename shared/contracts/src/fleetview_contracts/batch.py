@@ -47,7 +47,7 @@ class BatchEnvelope(BaseModel):
     payload_checksum: str
     """`sha256:<64 hex>` atas byte payload **terkompresi**."""
 
-    payload_encoding: PayloadEncoding = "zstd+msgpack"
+    payload_encoding: PayloadEncoding = "gzip+json"
     payload_size: Annotated[int, Field(gt=0)]
     """Ukuran byte setelah kompresi."""
 

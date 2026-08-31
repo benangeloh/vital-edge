@@ -55,7 +55,7 @@
       "type": "string"
     },
     "payload_encoding": {
-      "default": "zstd+msgpack",
+      "default": "gzip+json",
       "title": "Payload Encoding",
       "type": "string"
     },

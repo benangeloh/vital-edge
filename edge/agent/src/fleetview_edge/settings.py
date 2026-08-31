@@ -51,6 +51,12 @@ class StorageSettings(BaseModel):
 
     data_dir: Path = Path("/var/lib/fleetview")
     outbox_path: Path = Path("/var/lib/fleetview/outbox.db")
+    """Outbox SQLite — source of truth untuk data yang belum disetor."""
+
+    outbox_synchronous_full: bool = True
+    """fsync di setiap commit. Inilah yang membuat data selamat dari mati
+    listrik, dan itu satu-satunya alasan outbox ini ada. Matikan hanya untuk
+    pengujian."""
 
     influx_url: str = "http://127.0.0.1:8086"
     influx_org: str = "fleetview"
@@ -90,7 +96,27 @@ class SyncSettings(BaseModel):
     batch_max_bytes: int = Field(default=1_048_576, gt=0)
     batch_max_age_seconds: int = Field(default=60, gt=0)
     heartbeat_interval_seconds: int = Field(default=60, gt=0)
+    interval_seconds: float = Field(default=10.0, gt=0)
+
+    device_token: str = ""
+    """Kredensial device. Kosong hanya boleh saat pengembangan."""
+
+    max_attempts: int = Field(default=10, gt=0)
+    """Setelah sekian kegagalan berturut-turut, batch dikarantina. Datanya
+    TIDAK dihapus — hanya berhenti dicoba supaya tidak menyumbat antrean."""
+
+    acked_grace_days: int = Field(default=7, ge=0)
+    """Berapa lama baris yang sudah acked disimpan setelah ACK diterima.
+    Dihitung dari waktu ACK, bukan waktu pengukuran — kapal yang offline 30 hari
+    lalu menyetor backlog-nya tetap punya jendela replay penuh."""
+
+    retry_initial_seconds: float = Field(default=5.0, ge=0)
+    retry_max_seconds: float = Field(default=1800.0, gt=0)
+
     cellular_monthly_budget_mb: int = Field(default=500, ge=0)
+    cellular_max_priority: int = Field(default=1, ge=0, le=2)
+    """Prioritas terendah yang boleh lewat seluler. Default 1 (SUMMARY):
+    telemetry mentah 1 Hz tidak sepadan dengan kuota, alarm mesin sepadan."""
 
 
 class CollectorSettings(BaseModel):
