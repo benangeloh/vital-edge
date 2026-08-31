@@ -55,7 +55,7 @@ def _sensor(**over: object) -> SensorConfig:
         "unit": "rpm",
         "poll_interval_seconds": EVERY_POLL,
     }
-    return SensorConfig(**{**base, **over})  # type: ignore[arg-type]
+    return SensorConfig(**{**base, **over})
 
 
 def _collector(adapter: MockLPAAdapter, registry: SensorRegistry, sink: Sink) -> Collector:
@@ -309,3 +309,39 @@ class TestLoop:
         assert health["polls_succeeded"] == 1
         assert health["records_emitted"] == 1
         assert health["current_sequence"] == 1
+
+
+class TestSiklusHidup:
+    async def test_state_supervisor_ikut_bersih_setelah_berhenti(self) -> None:
+        """Setelah run() menutup adapter, supervisor tidak boleh mengira masih
+        tersambung — kalau tidak, menjalankan collector lagi akan melewatkan
+        connect() dan pembacaan pertamanya gagal."""
+        adapter = MockLPAAdapter({"ch_rpm": 700.0})
+        sink = Sink()
+        c = _collector(adapter, _registry(_sensor()), sink)
+
+        task = asyncio.create_task(c.run())
+        await asyncio.sleep(0.03)
+        c.stop()
+        await asyncio.wait_for(task, timeout=1.0)
+
+        assert adapter.is_connected is False
+        health = await c.snapshot_health()
+        assert health["connected"] is False
+
+    async def test_bisa_dijalankan_ulang_setelah_berhenti(self) -> None:
+        adapter = MockLPAAdapter({"ch_rpm": 700.0})
+        sink = Sink()
+        c = _collector(adapter, _registry(_sensor()), sink)
+
+        task = asyncio.create_task(c.run())
+        await asyncio.sleep(0.03)
+        c.stop()
+        await asyncio.wait_for(task, timeout=1.0)
+        before = len(sink.records)
+
+        c._stopping.clear()
+        records = await c.poll_once()
+
+        assert len(records) == 1
+        assert len(sink.records) > before

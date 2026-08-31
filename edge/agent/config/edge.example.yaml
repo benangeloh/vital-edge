@@ -20,6 +20,27 @@ ship:
   ship_name: "GANTI DENGAN NAMA KAPAL"
   device_id: "00000000-0000-0000-0000-000000000000"
 
+collector:
+  # Adapter perangkat lapangan.
+  #   lp_a104   -> perangkat sungguhan. BELUM BISA DIPAKAI: jalur baca dari
+  #                LP-A104 belum terkonfirmasi. Adapter-nya sengaja gagal keras
+  #                dengan pesan yang menjelaskan, bukan diam-diam mengembalikan
+  #                kosong. Lihat docs/hardware/LP-A104.md.
+  #   simulator -> profil mesin kapal yang wajar, untuk pengembangan dan demo
+  #   mock      -> nilai tetap yang bisa diskenariokan, untuk pengujian
+  #
+  # Config produksi WAJIB memakai lp_a104. Data simulasi tidak boleh pernah
+  # tersaji sebagai data sungguhan — kapal yang mengirim data simulasi akan
+  # tampak sehat sempurna di dashboard dan tidak akan ada yang menyadarinya.
+  adapter: lp_a104
+  sensors_path: /etc/fleetview/sensors.yaml
+  poll_interval_seconds: 1.0
+  poll_timeout_seconds: 5.0
+  # Selisih antara jam dinding dan jam monotonic yang dianggap lompatan jam.
+  clock_jump_threshold_seconds: 2.0
+  backoff_initial_seconds: 1.0
+  backoff_max_seconds: 60.0
+
 storage:
   data_dir: /var/lib/fleetview
   outbox_path: /var/lib/fleetview/outbox.db

@@ -180,6 +180,9 @@ class Collector:
                     await asyncio.wait_for(self._stopping.wait(), timeout=sleep_for)
         finally:
             await self._adapter.close()
+            # Supervisor harus ikut tahu, kalau tidak ia akan mengira masih
+            # tersambung dan melewatkan connect() saat collector dijalankan lagi.
+            self._supervisor.mark_disconnected("collector dihentikan")
             log.info(
                 "collector.stopped",
                 polls=self._stats.polls_attempted,
@@ -282,16 +285,44 @@ class Collector:
         return records
 
     def _filter_due(self, grouped: dict[str, list[ParsedValue]]) -> dict[str, list[ParsedValue]]:
-        """Buang sensor yang interval-nya belum jatuh tempo."""
+        """Buang sensor yang interval-nya belum jatuh tempo.
+
+        Dua hal yang perlu diperhatikan di sini, dan keduanya pernah salah:
+
+        **Toleransi.** Tanpa toleransi, sensor yang interval-nya sama dengan
+        interval polling akan kehilangan setiap sampel kedua: pembacaan yang
+        datang beberapa mikrodetik lebih awal dari tenggat dibuang, lalu yang
+        berikutnya baru masuk — hasilnya setengah laju. Toleransi 10% dari
+        interval menutup celah itu tanpa melonggarkan penjadwalan secara umum.
+
+        **Tenggat maju berdasarkan jadwal, bukan waktu baca aktual.** Kalau
+        selalu dihitung dari waktu baca, penyimpangan kecil menumpuk dan laju
+        sampling perlahan melenceng — pada sensor 1 Hz selama berbulan-bulan,
+        penyimpangannya menjadi besar.
+        """
         due: dict[str, list[ParsedValue]] = {}
         for sensor_id, values in grouped.items():
             sensor = values[0].sensor
             read_at = values[0].read_at_us
+            interval_us = int(sensor.poll_interval_seconds * 1_000_000)
+            tolerance_us = max(1, interval_us // 10)
             next_due = self._next_due_us.get(sensor_id)
-            if next_due is not None and read_at < next_due:
+
+            if next_due is not None and read_at < next_due - tolerance_us:
                 continue
+
             due[sensor_id] = values
-            self._next_due_us[sensor_id] = read_at + int(sensor.poll_interval_seconds * 1_000_000)
+
+            if next_due is None:
+                self._next_due_us[sensor_id] = read_at + interval_us
+            else:
+                advanced = next_due + interval_us
+                # Kalau sudah jauh tertinggal (mis. setelah sambungan putus
+                # berjam-jam), jangan menumpuk utang jadwal lalu memuntahkannya
+                # sekaligus — setel ulang dari sekarang.
+                self._next_due_us[sensor_id] = (
+                    advanced if advanced > read_at else read_at + interval_us
+                )
         return due
 
     @staticmethod

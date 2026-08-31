@@ -22,7 +22,7 @@ US = 1_000_000
 
 def _sensor(**over: object) -> SensorConfig:
     base: dict[str, object] = {"sensor_id": "s1", "channel": "ch1", "metric": "rpm"}
-    return SensorConfig(**{**base, **over})  # type: ignore[arg-type]
+    return SensorConfig(**{**base, **over})
 
 
 class TestParser:
@@ -67,7 +67,7 @@ class TestParser:
             ]
         )
         result = TelemetryParser(reg).parse([RawPoint("shared", 10, 1000)])
-        assert sorted(v.value for v in result.values) == [10.0, 20.0]  # type: ignore[type-var]
+        assert sorted(float(v.value) for v in result.values) == [10.0, 20.0]
 
     def test_sensor_nonaktif_diabaikan(self) -> None:
         reg = SensorRegistry([_sensor(enabled=False)])

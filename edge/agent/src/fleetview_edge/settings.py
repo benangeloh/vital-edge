@@ -78,6 +78,30 @@ class SyncSettings(BaseModel):
     cellular_monthly_budget_mb: int = Field(default=500, ge=0)
 
 
+class CollectorSettings(BaseModel):
+    """Setelan akuisisi data."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    adapter: Literal["mock", "simulator", "lp_a104"] = "simulator"
+    """Adapter perangkat lapangan.
+
+    `lp_a104` belum bisa dipakai: jalur baca dari perangkat belum terkonfirmasi,
+    dan adapter-nya sengaja gagal keras daripada diam-diam mengembalikan kosong.
+    Lihat docs/hardware/LP-A104.md.
+    """
+
+    sensors_path: Path | None = None
+    """Berkas YAML konfigurasi sensor. Wajib diisi di produksi."""
+
+    poll_interval_seconds: float = Field(default=1.0, gt=0)
+    poll_timeout_seconds: float = Field(default=5.0, gt=0)
+    clock_jump_threshold_seconds: float = Field(default=2.0, gt=0)
+
+    backoff_initial_seconds: float = Field(default=1.0, ge=0)
+    backoff_max_seconds: float = Field(default=60.0, gt=0)
+
+
 class ConsoleSettings(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -124,6 +148,7 @@ class EdgeSettings(BaseSettings):
 
     ship: ShipIdentity
     storage: StorageSettings = Field(default_factory=StorageSettings)
+    collector: CollectorSettings = Field(default_factory=CollectorSettings)
     sync: SyncSettings = Field(default_factory=SyncSettings)
     console: ConsoleSettings = Field(default_factory=ConsoleSettings)
 
@@ -153,6 +178,13 @@ class EdgeSettings(BaseSettings):
             problems.append("sync.central_url kosong")
         if self.log_format != "json":
             problems.append("log_format harus 'json' di produksi supaya log bisa diagregasi")
+        if self.collector.adapter != "lp_a104":
+            problems.append(
+                f"collector.adapter adalah {self.collector.adapter!r} — data simulasi/mock "
+                f"tidak boleh dipakai di produksi"
+            )
+        if self.collector.sensors_path is None:
+            problems.append("collector.sensors_path kosong")
         if self.console.host == "0.0.0.0":
             problems.append(
                 "console.host adalah 0.0.0.0 — Edge Console tidak boleh mendengarkan "

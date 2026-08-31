@@ -9,8 +9,17 @@ from __future__ import annotations
 
 from fastapi import FastAPI
 
-from fleetview_common import configure_logging, get_logger
+from fleetview_common import ConfigError, configure_logging, get_logger
 from fleetview_console import create_console_app
+from fleetview_contracts import AcquisitionSource
+from fleetview_edge.collector import BackoffPolicy, Collector, CollectorClock
+from fleetview_edge.config import SensorRegistry, load_sensor_registry
+from fleetview_edge.protocol import (
+    LPA104Adapter,
+    MockLPAAdapter,
+    ProtocolAdapter,
+    SimulatorAdapter,
+)
 from fleetview_edge.settings import EdgeSettings
 from fleetview_edge.version import AGENT_VERSION
 
@@ -44,6 +53,66 @@ class EdgeAgent:
             environment=self.settings.environment,
             config_version=self.settings.config_version,
             console_enabled=self.settings.console.enabled,
+            adapter=self.settings.collector.adapter,
+        )
+
+    def build_adapter(self) -> ProtocolAdapter:
+        """Pilih adapter perangkat lapangan sesuai config.
+
+        `lp_a104` sengaja tetap bisa dipilih meski belum diimplementasikan —
+        adapter-nya akan gagal keras dengan pesan yang menjelaskan kenapa, dan
+        itu jauh lebih baik daripada diam-diam jatuh ke simulator dan mengirim
+        data palsu yang terlihat sehat sempurna di dashboard.
+        """
+        choice = self.settings.collector.adapter
+        if choice == "mock":
+            return MockLPAAdapter({})
+        if choice == "simulator":
+            return SimulatorAdapter()
+        return LPA104Adapter()
+
+    def build_collector(self, sink: object) -> Collector:
+        """Rakit Collector. Membutuhkan config sensor.
+
+        Raises:
+            ConfigError: collector.sensors_path belum disetel atau tidak valid.
+        """
+        cfg = self.settings.collector
+        if cfg.sensors_path is None:
+            raise ConfigError(
+                "collector.sensors_path belum disetel; Collector tidak bisa dijalankan "
+                "tanpa tahu sensor apa yang harus dibaca",
+                code="config.sensors_path_missing",
+            )
+
+        registry: SensorRegistry = load_sensor_registry(cfg.sensors_path)
+        source = (
+            AcquisitionSource.SIMULATED
+            if cfg.adapter in {"mock", "simulator"}
+            else AcquisitionSource.LIVE
+        )
+
+        log.info(
+            "edge_agent.collector_built",
+            adapter=cfg.adapter,
+            sensors=len(registry.enabled),
+            source=source.value,
+        )
+
+        return Collector(
+            adapter=self.build_adapter(),
+            registry=registry,
+            sink=sink,  # type: ignore[arg-type]
+            ship_id=self.settings.ship.ship_id,
+            device_id=self.settings.ship.device_id,
+            clock=CollectorClock(jump_threshold_seconds=cfg.clock_jump_threshold_seconds),
+            poll_interval_seconds=cfg.poll_interval_seconds,
+            poll_timeout_seconds=cfg.poll_timeout_seconds,
+            backoff=BackoffPolicy(
+                initial_seconds=cfg.backoff_initial_seconds,
+                max_seconds=cfg.backoff_max_seconds,
+            ),
+            source=source,
         )
 
     def build_console(self) -> FastAPI:

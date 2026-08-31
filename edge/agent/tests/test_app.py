@@ -7,6 +7,7 @@ kapal terpencil, jadi ia perlu test tersendiri — bukan hanya lewat komponennya
 from __future__ import annotations
 
 import json
+from pathlib import Path
 
 import pytest
 from fastapi import FastAPI
@@ -60,6 +61,42 @@ def test_build_console_menghasilkan_app_yang_bisa_melayani() -> None:
     assert body["ok"] is True
     assert body["data"]["ship_name"] == "KM Uji Coba"
     assert body["data"]["agent_version"] == AGENT_VERSION
+
+
+def test_build_adapter_menghormati_pilihan_config() -> None:
+    from fleetview_edge.protocol import LPA104Adapter, MockLPAAdapter, SimulatorAdapter
+
+    assert isinstance(EdgeAgent(_settings()).build_adapter(), SimulatorAdapter)
+    assert isinstance(
+        EdgeAgent(_settings(collector={"adapter": "mock"})).build_adapter(), MockLPAAdapter
+    )
+    # lp_a104 tetap bisa dipilih meski belum jalan — gagal keras jauh lebih baik
+    # daripada diam-diam jatuh ke simulator dan mengirim data palsu.
+    assert isinstance(
+        EdgeAgent(_settings(collector={"adapter": "lp_a104"})).build_adapter(), LPA104Adapter
+    )
+
+
+def test_build_collector_butuh_config_sensor() -> None:
+    with pytest.raises(ConfigError, match="sensors_path"):
+        EdgeAgent(_settings()).build_collector(sink=lambda _r: None)
+
+
+def test_build_collector_menandai_data_simulasi() -> None:
+    """Record dari simulator harus membawa source=SIMULATED, supaya tidak akan
+    pernah tertukar dengan data sungguhan di hilir."""
+    from fleetview_contracts import AcquisitionSource
+
+    repo_root = Path(__file__).resolve().parents[3]
+    sensors = repo_root / "edge" / "agent" / "config" / "sensors.example.yaml"
+
+    agent = EdgeAgent(_settings(collector={"adapter": "simulator", "sensors_path": str(sensors)}))
+    collector = agent.build_collector(sink=_noop_sink)
+    assert collector._source is AcquisitionSource.SIMULATED
+
+
+async def _noop_sink(_records: list[object]) -> None:
+    return None
 
 
 def test_versi_agent_diteruskan_dari_settings() -> None:

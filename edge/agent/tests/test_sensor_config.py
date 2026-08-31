@@ -15,7 +15,7 @@ EXAMPLE = REPO_ROOT / "edge" / "agent" / "config" / "sensors.example.yaml"
 
 def _sensor(**over: object) -> SensorConfig:
     base: dict[str, object] = {"sensor_id": "s1", "channel": "ch1", "metric": "rpm"}
-    return SensorConfig(**{**base, **over})  # type: ignore[arg-type]
+    return SensorConfig(**{**base, **over})
 
 
 class TestSensorConfig:
@@ -29,7 +29,7 @@ class TestSensorConfig:
 
     @pytest.mark.parametrize("bad", ["Sensor1", "sensor-1", "sensor 1", "sensör", ""])
     def test_sensor_id_harus_slug(self, bad: str) -> None:
-        with pytest.raises(Exception, match="slug|String should"):
+        with pytest.raises(Exception, match=r"slug|String should"):
             _sensor(sensor_id=bad)
 
     @pytest.mark.parametrize("ok", ["1sensor", "me_port_rpm", "gps2", "a"])

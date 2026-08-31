@@ -169,14 +169,41 @@ class TestVerifikasiProduksi:
         s = self._settings(
             storage={"influx_token": "t"},
             sync={"central_url": "https://x"},
+            collector={"adapter": "lp_a104", "sensors_path": "/etc/fleetview/sensors.yaml"},
             console={"host": "0.0.0.0"},
         )
         with pytest.raises(ConfigError) as exc:
             s.verify_production_ready()
         assert "0.0.0.0" in str(exc.value)
 
+    def test_adapter_simulasi_ditolak_di_produksi(self) -> None:
+        """Data simulasi tidak boleh pernah tersaji sebagai data sungguhan.
+
+        Ini penjaga yang paling penting di seluruh pemeriksaan produksi: sebuah
+        kapal yang mengirim telemetry simulasi akan tampak sehat sempurna di
+        dashboard, dan tidak ada yang akan menyadarinya.
+        """
+        s = self._settings(
+            storage={"influx_token": "t"},
+            sync={"central_url": "https://x"},
+            collector={"adapter": "simulator", "sensors_path": "/etc/fleetview/sensors.yaml"},
+        )
+        with pytest.raises(ConfigError) as exc:
+            s.verify_production_ready()
+        assert "simulator" in str(exc.value)
+
+    def test_sensors_path_wajib_di_produksi(self) -> None:
+        s = self._settings(
+            storage={"influx_token": "t"},
+            sync={"central_url": "https://x"},
+            collector={"adapter": "lp_a104"},
+        )
+        with pytest.raises(ConfigError, match="sensors_path"):
+            s.verify_production_ready()
+
     def test_config_produksi_lengkap_lolos(self) -> None:
         self._settings(
             storage={"influx_token": "t"},
             sync={"central_url": "https://x"},
+            collector={"adapter": "lp_a104", "sensors_path": "/etc/fleetview/sensors.yaml"},
         ).verify_production_ready()
