@@ -1,0 +1,14 @@
+{
+  "name": "fleetview",
+  "private": true,
+  "packageManager": "pnpm@10.30.2",
+  "scripts": {
+    "lint": "pnpm -r --if-present lint",
+    "typecheck": "pnpm -r --if-present typecheck",
+    "build": "pnpm -r --if-present build",
+    "test": "pnpm -r --if-present test"
+  },
+  "devDependencies": {
+    "typescript": "^5.9.2"
+  }
+}

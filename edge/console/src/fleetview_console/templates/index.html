@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block title %}Status{% endblock %}
+
+{% block content %}
+<h1 class="page-title">Status Sistem</h1>
+
+<p class="notice">
+  Fondasi Phase 1. Panel status yang sesungguhnya — sambungan LP-A104, collector,
+  InfluxDB, storage, network, dan sync — dipasang di Phase 7, setelah komponen
+  yang dilaporkannya benar-benar ada.
+</p>
+
+<section class="panel">
+  <h2 class="panel__title">Agent</h2>
+  <dl class="kv">
+    <dt>Kapal</dt><dd>{{ ship_name }}</dd>
+    <dt>Ship ID</dt><dd class="mono">{{ ship_id }}</dd>
+    <dt>Versi</dt><dd class="mono">{{ agent_version }}</dd>
+    <dt>Environment</dt><dd>{{ environment }}</dd>
+  </dl>
+</section>
+{% endblock %}

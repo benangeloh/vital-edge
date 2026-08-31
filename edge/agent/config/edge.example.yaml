@@ -1,0 +1,46 @@
+# Contoh konfigurasi Edge Agent.
+#
+# Satu build agent yang sama dideploy ke 70+ kapal. Berkas inilah satu-satunya
+# yang membedakan mereka. Salin ke /etc/fleetview/edge.yaml lalu sesuaikan.
+#
+# Setiap nilai bisa ditimpa environment variable berawalan FLEETVIEW_ dengan
+# pemisah bertingkat `__`, misalnya:
+#   FLEETVIEW_SHIP__SHIP_NAME="KM Sinar Jaya"
+#   FLEETVIEW_STORAGE__INFLUX_TOKEN="..."   <- rahasia lewat env, bukan lewat file
+
+environment: production
+log_level: INFO
+log_format: json
+config_version: "cfg-2026-08-31-1"
+
+# Wajib. Tidak ada default — agent menolak start bila bagian ini kosong,
+# supaya tidak ada kapal yang mengirim data atas nama kapal lain.
+ship:
+  ship_id: "00000000-0000-0000-0000-000000000000"
+  ship_name: "GANTI DENGAN NAMA KAPAL"
+  device_id: "00000000-0000-0000-0000-000000000000"
+
+storage:
+  data_dir: /var/lib/fleetview
+  outbox_path: /var/lib/fleetview/outbox.db
+  influx_url: http://127.0.0.1:8086
+  influx_org: fleetview
+  influx_bucket: telemetry
+  # influx_token: lewat FLEETVIEW_STORAGE__INFLUX_TOKEN, jangan ditulis di sini
+  retention_days: 90
+  acked_grace_days: 7
+  disk_warn_percent: 80.0
+  disk_critical_percent: 90.0
+
+sync:
+  central_url: "https://fleetview.example.com"
+  batch_max_records: 500
+  batch_max_bytes: 1048576
+  batch_max_age_seconds: 60
+  heartbeat_interval_seconds: 60
+  cellular_monthly_budget_mb: 500
+
+console:
+  enabled: true
+  host: 127.0.0.1   # ubah ke 0.0.0.0 hanya bila Console perlu diakses dari LAN kapal
+  port: 8080

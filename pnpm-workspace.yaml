@@ -1,0 +1,3 @@
+packages:
+  - "shared/contracts/ts"
+  - "central/web"

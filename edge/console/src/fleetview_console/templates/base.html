@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="id">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}Edge Console{% endblock %} — {{ ship_name }}</title>
+  <link rel="stylesheet" href="/static/console.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="topbar__identity">
+      <span class="topbar__ship">{{ ship_name }}</span>
+      <span class="topbar__id" title="ship_id">{{ ship_id }}</span>
+    </div>
+    <div class="topbar__meta">
+      <span class="badge badge--{{ 'prod' if environment == 'production' else 'dev' }}">
+        {{ environment }}
+      </span>
+      <span class="topbar__version">v{{ agent_version }}</span>
+    </div>
+  </header>
+
+  <main class="content">
+    {% block content %}{% endblock %}
+  </main>
+
+  <footer class="footer">
+    FleetView Edge Console
+  </footer>
+</body>
+</html>

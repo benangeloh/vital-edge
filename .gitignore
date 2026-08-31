@@ -1,0 +1,36 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+*.egg-info/
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+.coverage
+coverage.xml
+htmlcov/
+
+# Node
+node_modules/
+dist/
+.vite/
+
+# Env & secrets — jangan pernah di-commit
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+docs/
+
+# Data runtime edge
+*.db
+*.db-wal
+*.db-shm
+/data/
+/var/
+
+# OS / editor
+.DS_Store
+.idea/
+.vscode/

@@ -1,0 +1,44 @@
+{
+  "$id": "https://fleetview.spil.co.id/schemas/1.0/sync-state.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Jawaban server atas pertanyaan \"apa yang sudah kamu punya dari kapal ini?\".\n\nEdge menanyakan ini sebelum mengirim, agar bisa melewati batch yang sudah\ncommitted dan tidak membuang bandwidth untuk data yang sudah sampai.",
+  "properties": {
+    "committed_batch_ids": {
+      "items": {
+        "format": "uuid",
+        "type": "string"
+      },
+      "title": "Committed Batch Ids",
+      "type": "array"
+    },
+    "highest_sequence_seen": {
+      "minimum": 0,
+      "title": "Highest Sequence Seen",
+      "type": "integer"
+    },
+    "last_contiguous_sequence": {
+      "minimum": 0,
+      "title": "Last Contiguous Sequence",
+      "type": "integer"
+    },
+    "server_time": {
+      "format": "date-time",
+      "title": "Server Time",
+      "type": "string"
+    },
+    "ship_id": {
+      "format": "uuid",
+      "title": "Ship Id",
+      "type": "string"
+    }
+  },
+  "required": [
+    "ship_id",
+    "last_contiguous_sequence",
+    "highest_sequence_seen",
+    "server_time"
+  ],
+  "title": "SyncState",
+  "type": "object"
+}

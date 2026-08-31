@@ -1,0 +1,93 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# CI sengaja dibuat ringan: tanpa layanan, tanpa matriks, tanpa build image.
+# Yang berat (Postgres/InfluxDB, uji beban, E2E) menyusul di Phase 5 dan 9,
+# saat sudah ada yang layak diuji dengan cara itu.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  UV_VERSION: "0.11.26"
+
+jobs:
+  python:
+    name: Python — lint, types, tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Pasang uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          version: ${{ env.UV_VERSION }}
+          enable-cache: true
+
+      - name: Pasang dependency
+        run: uv sync --all-packages
+
+      - name: Lint (ruff)
+        run: uv run ruff check --output-format=github .
+
+      - name: Cek format
+        run: uv run ruff format --check .
+
+      - name: Type-check (mypy)
+        run: uv run mypy .
+
+      - name: Test dengan coverage
+        run: uv run pytest --cov --cov-report=term-missing --cov-report=xml
+
+      - name: Unggah coverage
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage
+          path: coverage.xml
+          if-no-files-found: ignore
+
+  contracts:
+    name: Contracts — cek drift schema
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: astral-sh/setup-uv@v7
+        with:
+          version: ${{ env.UV_VERSION }}
+          enable-cache: true
+
+      - run: uv sync --all-packages
+
+      # JSON Schema dihasilkan dari model Pydantic dan ikut di-commit.
+      # Kalau keduanya berbeda, artefaknya basi dan konsumen di sisi TypeScript
+      # akan memakai kontrak yang salah.
+      - name: Pastikan JSON Schema sinkron dengan model Pydantic
+        run: uv run python shared/contracts/scripts/export_schemas.py --check
+
+  web:
+    name: Web — types & build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.30.2
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm -r --if-present typecheck
+      - run: pnpm -r --if-present build

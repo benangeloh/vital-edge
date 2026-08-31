@@ -1,0 +1,64 @@
+{
+  "$defs": {
+    "BatchStatus": {
+      "description": "Status batch di ledger server.",
+      "enum": [
+        "staging",
+        "committed",
+        "rejected"
+      ],
+      "title": "BatchStatus",
+      "type": "string"
+    }
+  },
+  "$id": "https://fleetview.spil.co.id/schemas/1.0/ack.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Bukti bahwa central sudah menyimpan sebuah batch secara durable.\n\nEdge menandai baris outbox sebagai acked **hanya** setelah menerima ini.\nServer menyimpan ACK yang diterbitkannya, sehingga ACK yang hilang di jalan\nbisa diputar ulang identik saat edge mengirim ulang — tidak perlu upload ulang.",
+  "properties": {
+    "batch_id": {
+      "format": "uuid",
+      "title": "Batch Id",
+      "type": "string"
+    },
+    "last_contiguous_sequence": {
+      "minimum": 0,
+      "title": "Last Contiguous Sequence",
+      "type": "integer"
+    },
+    "message": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Message"
+    },
+    "record_count": {
+      "minimum": 0,
+      "title": "Record Count",
+      "type": "integer"
+    },
+    "server_received_at": {
+      "format": "date-time",
+      "title": "Server Received At",
+      "type": "string"
+    },
+    "status": {
+      "$ref": "#/$defs/BatchStatus"
+    }
+  },
+  "required": [
+    "batch_id",
+    "status",
+    "last_contiguous_sequence",
+    "server_received_at",
+    "record_count"
+  ],
+  "title": "Ack",
+  "type": "object"
+}

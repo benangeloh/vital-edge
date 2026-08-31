@@ -1,0 +1,83 @@
+# Konfigurasi sensor — contoh, memakai channel SimulatorAdapter.
+#
+# Berkas inilah yang menerjemahkan channel mentah perangkat menjadi telemetry
+# yang bermakna. Ia berbeda per kapal. Menambah sensor cukup menambah entri di
+# sini; tidak perlu merilis versi Edge Agent baru.
+#
+# channel  : pengenal asli di perangkat. Untuk LP-A104 nanti berbentuk alamat UW
+#            (mis. UW65540); di sini memakai channel simulator.
+# scale/offset : nilai teknis = mentah x scale + offset. Perangkat industri lazim
+#            mengirim bilangan bulat berskala (mis. 7425 untuk 742,5 rpm).
+# validation : batas kewajaran. Pembacaan di luar batas TETAP DISIMPAN, hanya
+#            ditandai `suspect` — supaya "sensor rusak" bisa dibedakan dari
+#            "tidak ada data".
+
+sensors:
+  # ---- Mesin induk, sisi kiri -------------------------------------------
+  - sensor_id: me_port_rpm
+    channel: "sim:me_port_rpm"
+    metric: rpm
+    unit: rpm
+    poll_interval_seconds: 1.0
+    tags: { engine: port }
+    validation:
+      min_value: 0
+      max_value: 2000
+      # RPM tidak bisa melompat 800 dalam sedetik. Kalau terjadi, kemungkinan
+      # besar itu gangguan listrik atau kabel longgar — bukan mesinnya.
+      max_rate_per_second: 800
+      stale_after_seconds: 10
+
+  - sensor_id: me_port_load
+    channel: "sim:me_port_load"
+    metric: engine_load
+    unit: percent
+    tags: { engine: port }
+    validation: { min_value: 0, max_value: 100, stale_after_seconds: 10 }
+
+  - sensor_id: me_port_exhaust_temp
+    channel: "sim:me_port_exhaust_temp"
+    metric: temperature
+    unit: degC
+    tags: { engine: port, point: exhaust }
+    validation: { min_value: -20, max_value: 700, max_rate_per_second: 50, stale_after_seconds: 15 }
+
+  - sensor_id: me_port_lube_pressure
+    channel: "sim:me_port_lube_pressure"
+    metric: pressure
+    unit: bar
+    tags: { engine: port, point: lube_oil }
+    validation: { min_value: 0, max_value: 10, stale_after_seconds: 15 }
+
+  # ---- Bahan bakar -------------------------------------------------------
+  - sensor_id: fuel_level_main
+    channel: "sim:fuel_level"
+    metric: fuel_level
+    unit: percent
+    poll_interval_seconds: 5.0
+    tags: { tank: main }
+    validation: { min_value: 0, max_value: 100, stale_after_seconds: 60 }
+
+  - sensor_id: fuel_flow_me_port
+    channel: "sim:fuel_flow"
+    metric: fuel_flow
+    unit: l_per_hour
+    tags: { engine: port }
+    validation: { min_value: 0, max_value: 1000, stale_after_seconds: 30 }
+
+  # ---- Kelistrikan -------------------------------------------------------
+  - sensor_id: bus_voltage_main
+    channel: "sim:bus_voltage"
+    metric: voltage
+    unit: volt
+    tags: { bus: main }
+    validation: { min_value: 18, max_value: 32, stale_after_seconds: 30 }
+
+  # ---- GPS ---------------------------------------------------------------
+  # Empat entri dengan sensor_id yang SAMA dan field_name berbeda. Keempatnya
+  # tergabung menjadi satu record, sehingga lintang dan bujur tidak pernah
+  # bisa terpisah kalau salah satunya hilang.
+  - { sensor_id: gps_main, channel: "sim:gps_lat", metric: position, field_name: lat, validation: { min_value: -90,  max_value: 90 } }
+  - { sensor_id: gps_main, channel: "sim:gps_lon", metric: position, field_name: lon, validation: { min_value: -180, max_value: 180 } }
+  - { sensor_id: gps_main, channel: "sim:gps_sog", metric: position, field_name: sog, unit: knot, validation: { min_value: 0, max_value: 60 } }
+  - { sensor_id: gps_main, channel: "sim:gps_cog", metric: position, field_name: cog, unit: degree, validation: { min_value: 0, max_value: 360 } }

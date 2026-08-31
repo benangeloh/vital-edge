@@ -1,0 +1,121 @@
+{
+  "$defs": {
+    "Transport": {
+      "description": "Jalur fisik yang dipakai satu batch untuk sampai ke central.",
+      "enum": [
+        "lan",
+        "wifi",
+        "cellular",
+        "usb"
+      ],
+      "title": "Transport",
+      "type": "string"
+    }
+  },
+  "$id": "https://fleetview.spil.co.id/schemas/1.0/batch-envelope.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Metadata satu batch. Dikirim sebagai header sebelum payload-nya.\n\n`batch_id` dibuat di edge dan menjadi primary key ledger server. Karena itu\npengiriman ulang menghasilkan konflik primary key, bukan data ganda — inilah\nlapis pertama pengaman idempotensi.",
+  "properties": {
+    "agent_version": {
+      "title": "Agent Version",
+      "type": "string"
+    },
+    "batch_id": {
+      "format": "uuid",
+      "title": "Batch Id",
+      "type": "string"
+    },
+    "config_version": {
+      "title": "Config Version",
+      "type": "string"
+    },
+    "created_at": {
+      "format": "date-time",
+      "title": "Created At",
+      "type": "string"
+    },
+    "device_id": {
+      "format": "uuid",
+      "title": "Device Id",
+      "type": "string"
+    },
+    "first_timestamp": {
+      "format": "date-time",
+      "title": "First Timestamp",
+      "type": "string"
+    },
+    "last_timestamp": {
+      "format": "date-time",
+      "title": "Last Timestamp",
+      "type": "string"
+    },
+    "payload_checksum": {
+      "title": "Payload Checksum",
+      "type": "string"
+    },
+    "payload_encoding": {
+      "default": "zstd+msgpack",
+      "title": "Payload Encoding",
+      "type": "string"
+    },
+    "payload_size": {
+      "exclusiveMinimum": 0,
+      "title": "Payload Size",
+      "type": "integer"
+    },
+    "record_count": {
+      "exclusiveMinimum": 0,
+      "title": "Record Count",
+      "type": "integer"
+    },
+    "schema_version": {
+      "default": "1.0",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "sequence_end": {
+      "minimum": 0,
+      "title": "Sequence End",
+      "type": "integer"
+    },
+    "sequence_start": {
+      "minimum": 0,
+      "title": "Sequence Start",
+      "type": "integer"
+    },
+    "ship_id": {
+      "format": "uuid",
+      "title": "Ship Id",
+      "type": "string"
+    },
+    "transport": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/Transport"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    }
+  },
+  "required": [
+    "batch_id",
+    "ship_id",
+    "device_id",
+    "sequence_start",
+    "sequence_end",
+    "first_timestamp",
+    "last_timestamp",
+    "record_count",
+    "payload_checksum",
+    "payload_size",
+    "agent_version",
+    "config_version",
+    "created_at"
+  ],
+  "title": "BatchEnvelope",
+  "type": "object"
+}

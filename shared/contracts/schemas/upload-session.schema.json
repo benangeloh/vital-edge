@@ -1,0 +1,49 @@
+{
+  "$id": "https://fleetview.spil.co.id/schemas/1.0/upload-session.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Sesi upload yang bisa dilanjutkan, untuk batch yang dikirim per potongan.",
+  "properties": {
+    "batch_id": {
+      "format": "uuid",
+      "title": "Batch Id",
+      "type": "string"
+    },
+    "chunk_size": {
+      "exclusiveMinimum": 0,
+      "title": "Chunk Size",
+      "type": "integer"
+    },
+    "expires_at": {
+      "format": "date-time",
+      "title": "Expires At",
+      "type": "string"
+    },
+    "received_chunks": {
+      "items": {
+        "type": "integer"
+      },
+      "title": "Received Chunks",
+      "type": "array"
+    },
+    "session_id": {
+      "format": "uuid",
+      "title": "Session Id",
+      "type": "string"
+    },
+    "total_chunks": {
+      "exclusiveMinimum": 0,
+      "title": "Total Chunks",
+      "type": "integer"
+    }
+  },
+  "required": [
+    "session_id",
+    "batch_id",
+    "chunk_size",
+    "total_chunks",
+    "expires_at"
+  ],
+  "title": "UploadSession",
+  "type": "object"
+}

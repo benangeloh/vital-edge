@@ -1,0 +1,176 @@
+{
+  "$defs": {
+    "EdgeHealth": {
+      "additionalProperties": false,
+      "description": "Ringkasan kesehatan Edge Agent, cukup untuk mengisi tampilan armada.",
+      "properties": {
+        "clock_skew_seconds": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Clock Skew Seconds"
+        },
+        "collector_healthy": {
+          "title": "Collector Healthy",
+          "type": "boolean"
+        },
+        "cpu_used_percent": {
+          "maximum": 100,
+          "minimum": 0,
+          "title": "Cpu Used Percent",
+          "type": "number"
+        },
+        "disk_used_percent": {
+          "maximum": 100,
+          "minimum": 0,
+          "title": "Disk Used Percent",
+          "type": "number"
+        },
+        "memory_used_percent": {
+          "maximum": 100,
+          "minimum": 0,
+          "title": "Memory Used Percent",
+          "type": "number"
+        },
+        "protocol_link_healthy": {
+          "title": "Protocol Link Healthy",
+          "type": "boolean"
+        },
+        "storage_healthy": {
+          "title": "Storage Healthy",
+          "type": "boolean"
+        },
+        "uptime_seconds": {
+          "minimum": 0,
+          "title": "Uptime Seconds",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "disk_used_percent",
+        "memory_used_percent",
+        "cpu_used_percent",
+        "uptime_seconds",
+        "collector_healthy",
+        "storage_healthy",
+        "protocol_link_healthy"
+      ],
+      "title": "EdgeHealth",
+      "type": "object"
+    },
+    "Transport": {
+      "description": "Jalur fisik yang dipakai satu batch untuk sampai ke central.",
+      "enum": [
+        "lan",
+        "wifi",
+        "cellular",
+        "usb"
+      ],
+      "title": "Transport",
+      "type": "string"
+    }
+  },
+  "$id": "https://fleetview.spil.co.id/schemas/1.0/heartbeat.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Dikirim berkala oleh edge, terlepas dari ada tidaknya data untuk disinkronkan.",
+  "properties": {
+    "active_transport": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/Transport"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "agent_version": {
+      "title": "Agent Version",
+      "type": "string"
+    },
+    "config_version": {
+      "title": "Config Version",
+      "type": "string"
+    },
+    "device_id": {
+      "format": "uuid",
+      "title": "Device Id",
+      "type": "string"
+    },
+    "health": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/EdgeHealth"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "last_telemetry_at": {
+      "anyOf": [
+        {
+          "format": "date-time",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Last Telemetry At"
+    },
+    "oldest_pending_age_seconds": {
+      "anyOf": [
+        {
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Oldest Pending Age Seconds"
+    },
+    "pending_batches": {
+      "default": 0,
+      "minimum": 0,
+      "title": "Pending Batches",
+      "type": "integer"
+    },
+    "pending_records": {
+      "default": 0,
+      "minimum": 0,
+      "title": "Pending Records",
+      "type": "integer"
+    },
+    "sent_at": {
+      "format": "date-time",
+      "title": "Sent At",
+      "type": "string"
+    },
+    "ship_id": {
+      "format": "uuid",
+      "title": "Ship Id",
+      "type": "string"
+    }
+  },
+  "required": [
+    "ship_id",
+    "device_id",
+    "sent_at",
+    "agent_version",
+    "config_version"
+  ],
+  "title": "Heartbeat",
+  "type": "object"
+}

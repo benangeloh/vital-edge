@@ -1,0 +1,53 @@
+# Stack pengembangan. BUKAN untuk produksi.
+#
+# Kredensial di berkas ini sengaja lemah dan sengaja terlihat — ini environment
+# lokal sekali pakai. Produksi memakai secret dari environment atau secret
+# manager, tidak pernah dari berkas di repo.
+#
+#   docker compose up -d
+#   Postgres  -> localhost:5432
+#   InfluxDB  -> localhost:8086  (UI di http://localhost:8086)
+
+name: fleetview-dev
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: fleetview
+      POSTGRES_PASSWORD: fleetview
+      POSTGRES_DB: fleetview
+    ports: ["5432:5432"]
+    volumes: ["pgdata:/var/lib/postgresql/data"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U fleetview -d fleetview"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  influxdb:
+    # 2.7 dipilih karena build arm64-nya matang — edge berjalan di Raspberry Pi,
+    # dan versi di sini harus sama dengan yang di kapal.
+    image: influxdb:2.7-alpine
+    environment:
+      DOCKER_INFLUXDB_INIT_MODE: setup
+      DOCKER_INFLUXDB_INIT_USERNAME: fleetview
+      DOCKER_INFLUXDB_INIT_PASSWORD: fleetview-dev-password
+      DOCKER_INFLUXDB_INIT_ORG: fleetview
+      DOCKER_INFLUXDB_INIT_BUCKET: telemetry
+      DOCKER_INFLUXDB_INIT_ADMIN_TOKEN: fleetview-dev-token
+      DOCKER_INFLUXDB_INIT_RETENTION: 90d
+    ports: ["8086:8086"]
+    volumes:
+      - influxdata:/var/lib/influxdb2
+      - influxconfig:/etc/influxdb2
+    healthcheck:
+      test: ["CMD", "influx", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  pgdata:
+  influxdata:
+  influxconfig:

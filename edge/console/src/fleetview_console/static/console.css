@@ -1,0 +1,116 @@
+/* Edge Console — sengaja dibuat kecil.
+   Tidak ada framework CSS, tidak ada build step. Halaman ini harus terbuka
+   cepat lewat LAN kapal yang lambat, saat sedang ada masalah.
+   Token warna mengikuti docs/architecture/07-design-direction.md. */
+
+:root {
+  --green-deep: #012B24;
+  --green-bright: #0FBC58;
+  --red-brand: #CE0F2D;
+  --white: #FFFFFF;
+  --surface: #F7F8F7;
+  --border: #E4E8E5;
+  --text: #12211C;
+  --text-muted: #5C6B64;
+
+  --space-1: 0.5rem;
+  --space-2: 1rem;
+  --space-3: 1.5rem;
+  --space-4: 2rem;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--surface);
+  color: var(--text);
+  font: 15px/1.55 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+
+.topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+  padding: var(--space-2) var(--space-3);
+  background: var(--green-deep);
+  color: var(--white);
+}
+
+.topbar__identity { display: flex; flex-direction: column; }
+.topbar__ship { font-size: 1.05rem; font-weight: 600; }
+.topbar__id {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.75rem;
+  opacity: 0.7;
+}
+.topbar__meta { display: flex; align-items: center; gap: var(--space-2); }
+.topbar__version {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.8rem;
+  opacity: 0.8;
+}
+
+.badge {
+  padding: 0.15rem 0.5rem;
+  border-radius: 3px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.badge--prod { background: var(--green-bright); color: var(--green-deep); }
+.badge--dev  { background: var(--red-brand); color: var(--white); }
+
+.content {
+  max-width: 60rem;
+  margin: 0 auto;
+  padding: var(--space-4) var(--space-3);
+}
+
+.page-title { margin: 0 0 var(--space-3); font-size: 1.4rem; font-weight: 600; }
+
+.notice {
+  margin: 0 0 var(--space-3);
+  padding: var(--space-2);
+  border-left: 3px solid var(--border);
+  background: var(--white);
+  color: var(--text-muted);
+  font-size: 0.9rem;
+}
+
+.panel {
+  background: var(--white);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: var(--space-3);
+}
+.panel__title {
+  margin: 0 0 var(--space-2);
+  font-size: 0.78rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.kv { display: grid; grid-template-columns: 10rem 1fr; gap: var(--space-1) var(--space-2); margin: 0; }
+.kv dt { color: var(--text-muted); }
+.kv dd { margin: 0; }
+
+/* Angka dan ID memakai monospace supaya kolom tidak bergoyang saat nilai berubah. */
+.mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.85rem; }
+
+.footer {
+  padding: var(--space-3);
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 0.8rem;
+}
+
+@media (max-width: 30rem) {
+  .kv { grid-template-columns: 1fr; }
+  .kv dt { margin-top: var(--space-1); }
+}

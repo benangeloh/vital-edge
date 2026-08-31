@@ -1,0 +1,112 @@
+{
+  "$defs": {
+    "AcquisitionSource": {
+      "description": "Cara sebuah pembacaan sampai ke Edge Agent.\n\nIni ada karena jalur integrasi LP-A104 belum terkonfirmasi: sebagian kandidat\nmenghasilkan aliran real-time, satu kandidat menghasilkan impor file secara\nberkala. Keduanya harus bisa dibedakan di hilir, karena impor file wajar\nmembawa timestamp lama dan urutan yang tidak rapi.\n\nLihat docs/hardware/LP-A104.md.",
+      "enum": [
+        "live",
+        "file_import",
+        "simulated",
+        "manual"
+      ],
+      "title": "AcquisitionSource",
+      "type": "string"
+    },
+    "Quality": {
+      "description": "Tingkat kepercayaan terhadap satu pembacaan.\n\nPembacaan yang buruk tetap dikirim disertai flag, bukan dibuang — supaya\ncentral bisa membedakan \"sensornya rusak\" dari \"kita tidak punya datanya\".",
+      "enum": [
+        "good",
+        "stale",
+        "suspect",
+        "substituted"
+      ],
+      "title": "Quality",
+      "type": "string"
+    }
+  },
+  "$id": "https://fleetview.spil.co.id/schemas/1.0/reading.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Satu titik data pada satu waktu, dari satu sensor.\n\nMemetakan langsung ke satu titik InfluxDB: `measurement` jadi measurement,\n`tags` jadi tag, `fields` jadi field, `ts` jadi timestamp.\n\nSebuah Reading membawa **beberapa field**, bukan satu nilai tunggal. Ini\ndisengaja: GPS harus mengirim lat/lon/sog/cog sebagai satu titik, kalau\ndipecah menjadi empat titik terpisah, lintang dan bujur bisa tidak konsisten\nsaat salah satunya hilang. Untuk sensor skalar biasa, pakai `Reading.scalar()`.",
+  "properties": {
+    "fields": {
+      "additionalProperties": {
+        "anyOf": [
+          {
+            "type": "number"
+          },
+          {
+            "type": "integer"
+          },
+          {
+            "type": "boolean"
+          },
+          {
+            "type": "string"
+          }
+        ]
+      },
+      "minProperties": 1,
+      "title": "Fields",
+      "type": "object"
+    },
+    "measurement": {
+      "maxLength": 64,
+      "minLength": 1,
+      "title": "Measurement",
+      "type": "string"
+    },
+    "quality": {
+      "$ref": "#/$defs/Quality",
+      "default": "good"
+    },
+    "sensor_id": {
+      "maxLength": 64,
+      "minLength": 1,
+      "title": "Sensor Id",
+      "type": "string"
+    },
+    "seq": {
+      "minimum": 0,
+      "title": "Seq",
+      "type": "integer"
+    },
+    "source": {
+      "$ref": "#/$defs/AcquisitionSource",
+      "default": "live"
+    },
+    "tags": {
+      "additionalProperties": {
+        "type": "string"
+      },
+      "title": "Tags",
+      "type": "object"
+    },
+    "ts": {
+      "minimum": 0,
+      "title": "Ts",
+      "type": "integer"
+    },
+    "unit": {
+      "anyOf": [
+        {
+          "maxLength": 32,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Unit"
+    }
+  },
+  "required": [
+    "seq",
+    "ts",
+    "sensor_id",
+    "measurement",
+    "fields"
+  ],
+  "title": "Reading",
+  "type": "object"
+}
