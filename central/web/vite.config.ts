@@ -16,7 +16,10 @@ export default defineConfig({
     },
   },
   build: {
-    // Budget dari docs: halaman app < 300 KB JS ter-gzip.
-    chunkSizeWarningLimit: 300,
+    // Budget di docs/architecture ditetapkan pada ukuran TER-GZIP (< 300 KB),
+    // sementara ambang Vite mengukur ukuran mentah. Angka di bawah kira-kira
+    // setara dengan budget itu, supaya peringatannya bermakna alih-alih selalu
+    // menyala. Ukuran gzip yang sesungguhnya dicetak di keluaran build.
+    chunkSizeWarningLimit: 900,
   },
 });

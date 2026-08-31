@@ -50,7 +50,10 @@ web-install: ## Pasang dependency frontend
 web-lint: ## Type-check frontend
 	pnpm -r --if-present typecheck
 
-check: lint typecheck test schema-check ## Jalankan semua pemeriksaan (dipakai CI)
+web-test: ## Jalankan test frontend
+	pnpm -r --if-present test
+
+check: lint typecheck test schema-check web-lint web-test ## Jalankan semua pemeriksaan (dipakai CI)
 
 up: ## Nyalakan stack dev (Postgres + InfluxDB)
 	docker compose up -d

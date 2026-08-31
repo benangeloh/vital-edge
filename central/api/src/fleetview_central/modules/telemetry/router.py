@@ -13,6 +13,7 @@ from uuid import UUID
 from fastapi import APIRouter, Query
 
 from fleetview_central.http.envelope import success
+from fleetview_central.modules.telemetry.service import parse_flux_csv
 from fleetview_central.platform.deps import CurrentUser, Influx
 
 router = APIRouter(prefix="/api/v1/telemetry", tags=["telemetry"])
@@ -62,10 +63,11 @@ async def series(
         flux += f' |> filter(fn:(r) => r.sensor_id == "{sensor_id}")'
     flux += f" |> aggregateWindow(every:{window}, fn:{aggregate}, createEmpty:false)"
 
-    csv = await influx.query_csv(flux)
+    series = parse_flux_csv(await influx.query_csv(flux))
     return success(
-        {"csv": csv, "bucket_used": bucket, "window": window, "aggregate": aggregate},
+        {"series": series, "bucket_used": bucket, "window": window, "aggregate": aggregate},
         downsampled=bucket != "raw",
+        series_count=len(series),
     )
 
 
@@ -76,4 +78,4 @@ async def latest(user: CurrentUser, influx: Influx, ship_id: UUID) -> dict[str, 
         f'from(bucket:"telemetry") |> range(start:-24h, stop:{FUTURE_MARGIN}) '
         f'|> filter(fn:(r) => r.ship_id == "{ship_id}") |> last()'
     )
-    return success({"csv": await influx.query_csv(flux)})
+    return success({"series": parse_flux_csv(await influx.query_csv(flux))})

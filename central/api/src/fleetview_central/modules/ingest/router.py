@@ -159,5 +159,14 @@ async def ship_sync_status(ship_id: UUID, db: DbSession, influx: Influx) -> dict
             "total_records": row.total_records if row else 0,
             "connection_state": row.connection_state if row else "offline",
             "pending_estimate": row.pending_estimate if row else None,
+            # Disertakan supaya klien bisa menurunkan status dengan cara yang
+            # sama seperti di tampilan armada. Tanpa ini, halaman detail memakai
+            # connection_state mentah dan bisa menampilkan "Online" untuk kapal
+            # yang di tabel armada tertulis offline — bertentangan sendiri.
+            "last_batch_received_at": (
+                row.last_batch_received_at.isoformat()
+                if row and row.last_batch_received_at
+                else None
+            ),
         }
     )

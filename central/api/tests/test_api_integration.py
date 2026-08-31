@@ -362,3 +362,46 @@ class TestObservabilitas:
             "/api/v1/alerts",
         ):
             assert expected in paths, f"{expected} tidak ada di OpenAPI"
+
+
+class TestTelemetryJson:
+    """Chart butuh JSON, bukan CSV Flux mentah."""
+
+    async def test_series_terurai_jadi_json(self, client, seeded) -> None:
+        token = await _device_token(client)
+        env, payload = _batch(seeded["ship_id"], seeded["device_id"], n=5)
+        await client.post(
+            "/api/v1/ingest/batches",
+            content=payload,
+            headers={
+                "Authorization": f"Bearer {token}",
+                "Content-Type": "application/octet-stream",
+                "X-Batch-Envelope": env.model_dump_json(),
+            },
+        )
+        user = await _user_token(client)
+        r = await client.get(
+            f"/api/v1/telemetry/series?ship_id={seeded['ship_id']}&range_seconds=7200",
+            headers={"Authorization": f"Bearer {user}"},
+        )
+        assert r.status_code == 200, r.text
+        data = r.json()["data"]
+        assert data["bucket_used"] == "raw"
+        series = data["series"]
+        assert len(series) >= 1
+        first = series[0]
+        assert first["sensor_id"] == "me_port_rpm"
+        assert first["measurement"] == "rpm"
+        assert len(first["points"]) >= 1
+        ts, value = first["points"][0]
+        assert isinstance(ts, str) and isinstance(value, float)
+
+    async def test_kapal_tanpa_data_mengembalikan_daftar_kosong(self, client, seeded) -> None:
+        """Bukan error. Kapal baru memang belum punya telemetry."""
+        user = await _user_token(client)
+        r = await client.get(
+            f"/api/v1/telemetry/series?ship_id={seeded['ship_id']}",
+            headers={"Authorization": f"Bearer {user}"},
+        )
+        assert r.status_code == 200
+        assert r.json()["data"]["series"] == []
