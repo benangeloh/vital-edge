@@ -58,7 +58,22 @@ class StorageSettings(BaseModel):
     influx_token: str = ""
     """Kosong hanya boleh saat pengembangan. Diverifikasi ada di produksi."""
 
-    retention_days: int = Field(default=90, ge=1)
+    retention_days: int = Field(default=90, ge=0)
+    """Umur simpan telemetry di InfluxDB lokal. 0 berarti tak terbatas —
+    tidak dianjurkan di edge, karena disk penuh menghentikan akuisisi."""
+
+    influx_timeout_seconds: float = Field(default=10.0, gt=0)
+
+    buffer_max_records: int = Field(default=10_000, gt=0)
+    """Kapasitas buffer percobaan ulang in-memory.
+
+    Buffer ini menangani InfluxDB yang mati sesaat, bukan mati listrik.
+    Isinya hilang saat proses berakhir. Durabilitas sesungguhnya adalah tugas
+    outbox di Phase 4. Pada 1 Hz dengan 80 sensor, 10.000 record kira-kira
+    dua menit — cukup untuk restart atau compaction, tidak cukup untuk
+    pemadaman panjang."""
+
+    buffer_retry_batch_size: int = Field(default=500, gt=0)
     acked_grace_days: int = Field(default=7, ge=0)
     """Berapa lama baris yang sudah acked tetap disimpan. Menyisakan jendela
     replay lokal seandainya central pernah kehilangan data."""

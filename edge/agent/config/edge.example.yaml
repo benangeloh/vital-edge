@@ -48,8 +48,21 @@ storage:
   influx_org: fleetview
   influx_bucket: telemetry
   # influx_token: lewat FLEETVIEW_STORAGE__INFLUX_TOKEN, jangan ditulis di sini
+  influx_timeout_seconds: 10.0
+
+  # Umur simpan telemetry di InfluxDB lokal. 0 = tak terbatas, TIDAK dianjurkan
+  # di kapal: disk penuh menghentikan akuisisi, dan itu kegagalan yang paling
+  # merugikan karena terjadi diam-diam.
   retention_days: 90
   acked_grace_days: 7
+
+  # Buffer percobaan ulang in-memory saat InfluxDB tidak tersedia.
+  # Menangani: restart, compaction, lonjakan beban.
+  # TIDAK menangani: mati listrik, dan InfluxDB mati berjam-jam — isinya hilang
+  # saat proses berakhir. Durabilitas sesungguhnya menyusul di Phase 4 (outbox).
+  # Pada 1 Hz dengan 80 sensor, 10.000 record kira-kira dua menit.
+  buffer_max_records: 10000
+  buffer_retry_batch_size: 500
   disk_warn_percent: 80.0
   disk_critical_percent: 90.0
 

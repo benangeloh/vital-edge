@@ -21,6 +21,12 @@ from fleetview_edge.protocol import (
     SimulatorAdapter,
 )
 from fleetview_edge.settings import EdgeSettings
+from fleetview_edge.storage import (
+    InfluxTelemetryStore,
+    RetentionPolicy,
+    StorageWriter,
+    TelemetryStore,
+)
 from fleetview_edge.version import AGENT_VERSION
 
 __all__ = ["EdgeAgent"]
@@ -113,6 +119,31 @@ class EdgeAgent:
                 max_seconds=cfg.backoff_max_seconds,
             ),
             source=source,
+        )
+
+    def build_store(self) -> TelemetryStore:
+        """Bangun penyimpanan telemetry lokal."""
+        cfg = self.settings.storage
+        return InfluxTelemetryStore(
+            url=cfg.influx_url,
+            org=cfg.influx_org,
+            bucket=cfg.influx_bucket,
+            token=cfg.influx_token,
+            retention=RetentionPolicy(days=cfg.retention_days),
+            timeout_seconds=cfg.influx_timeout_seconds,
+        )
+
+    def build_writer(self, store: TelemetryStore | None = None) -> StorageWriter:
+        """Bangun sink penyimpanan untuk Collector.
+
+        Writer inilah yang menjamin kegagalan penyimpanan tidak pernah
+        menghentikan akuisisi — lihat storage/writer.py.
+        """
+        cfg = self.settings.storage
+        return StorageWriter(
+            store or self.build_store(),
+            buffer_max_records=cfg.buffer_max_records,
+            retry_batch_size=cfg.buffer_retry_batch_size,
         )
 
     def build_console(self) -> FastAPI:
