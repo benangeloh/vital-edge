@@ -6,13 +6,12 @@ Dijalankan systemd di kapal:  `fleetview-edge --config /etc/fleetview/edge.yaml`
 from __future__ import annotations
 
 import argparse
+import asyncio
 import sys
 from pathlib import Path
 
-import uvicorn
-
 from fleetview_common import ConfigError, get_logger
-from fleetview_edge.app import EdgeAgent
+from fleetview_edge.runtime import run
 from fleetview_edge.settings import load_settings
 from fleetview_edge.version import AGENT_VERSION
 
@@ -44,26 +43,15 @@ def main(argv: list[str] | None = None) -> int:
         print(f"config error [{exc.code}]: {exc.message}", file=sys.stderr)  # noqa: T201
         return 2
 
-    agent = EdgeAgent(settings)
-    agent.setup()
-
-    if not settings.console.enabled:
-        log.warning("edge_agent.console_disabled")
-        log.info("edge_agent.idle", reason="collector belum ada sampai Phase 2")
+    # Seluruh komponen berjalan di satu proses: collector, sync engine, dan
+    # Console. Lihat runtime.py untuk urutan penyalaan dan alasannya.
+    try:
+        return asyncio.run(run(settings))
+    except ConfigError as exc:
+        print(f"config error [{exc.code}]: {exc.message}", file=sys.stderr)  # noqa: T201
+        return 2
+    except KeyboardInterrupt:
         return 0
-
-    log.info(
-        "edge_agent.console_starting",
-        host=settings.console.host,
-        port=settings.console.port,
-    )
-    uvicorn.run(
-        agent.build_console(),
-        host=settings.console.host,
-        port=settings.console.port,
-        log_config=None,  # structlog sudah memegang kendali output
-    )
-    return 0
 
 
 if __name__ == "__main__":

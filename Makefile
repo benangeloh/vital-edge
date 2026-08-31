@@ -29,6 +29,10 @@ test-integration: up ## Jalankan integration test terhadap Postgres + InfluxDB s
 	uv run alembic -c central/api/alembic.ini upgrade head
 	uv run pytest -m integration
 
+test-e2e: up ## Jalankan simulasi armada end-to-end (3 kapal)
+	uv run alembic -c central/api/alembic.ini upgrade head
+	uv run pytest -m e2e -v
+
 migrate: ## Terapkan migrasi database
 	uv run alembic -c central/api/alembic.ini upgrade head
 

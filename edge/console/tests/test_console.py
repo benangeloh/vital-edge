@@ -10,19 +10,20 @@ buruk — karena itulah saat Console dibuka:
 
 from __future__ import annotations
 
+from collections.abc import Callable
+from typing import Any
+
 import pytest
 from fastapi.testclient import TestClient
 
 from fleetview_console import create_console_app
 
-from .fakes import FakeContext
-
 PAGES = ["/", "/sensors", "/sync", "/export", "/network", "/logs", "/config"]
 
 
-def make_client(context: FakeContext | None = None) -> TestClient:
+def make_client(context: Any) -> TestClient:
     app = create_console_app(
-        context=context or FakeContext(),
+        context=context,
         ship_name="KM Sinar Jaya",
         ship_id="11111111-1111-1111-1111-111111111111",
         agent_version="0.1.0",
@@ -32,8 +33,8 @@ def make_client(context: FakeContext | None = None) -> TestClient:
 
 
 @pytest.fixture
-def client() -> TestClient:
-    return make_client()
+def client(make_context: Callable[..., Any]) -> TestClient:
+    return make_client(make_context())
 
 
 class TestSemuaHalaman:
@@ -76,16 +77,20 @@ class TestTetapTampilSaatRusak:
             ("/config", "config"),
         ],
     )
-    def test_halaman_tetap_200_dan_menjelaskan(self, path: str, broken: str) -> None:
-        client = make_client(FakeContext(fail={broken}))
+    def test_halaman_tetap_200_dan_menjelaskan(
+        self, path: str, broken: str, make_context: Callable[..., Any]
+    ) -> None:
+        client = make_client(make_context(fail={broken}))
         response = client.get(path)
         assert response.status_code == 200
         assert "tidak tersedia" in response.text
 
-    def test_ikhtisar_tetap_menampilkan_sync_saat_sistem_rusak(self) -> None:
+    def test_ikhtisar_tetap_menampilkan_sync_saat_sistem_rusak(
+        self, make_context: Callable[..., Any]
+    ) -> None:
         """Bagian yang masih bisa dibaca harus tetap terbaca — itu inti
         pengambilan data per bagian."""
-        client = make_client(FakeContext(fail={"system"}))
+        client = make_client(make_context(fail={"system"}))
         text = client.get("/").text
         assert "Tidak bisa membaca status sistem" in text
         assert "18.400" in text  # data sync tetap tampil
@@ -120,21 +125,25 @@ class TestBekerjaTanpaJavascript:
         text = client.get("/logs").text
         assert 'href="/logs?level=error"' in text
 
-    def test_trigger_sync_memanggil_agent_lalu_mengalihkan(self) -> None:
-        context = FakeContext()
+    def test_trigger_sync_memanggil_agent_lalu_mengalihkan(
+        self, make_context: Callable[..., Any]
+    ) -> None:
+        context = make_context()
         client = make_client(context)
         response = client.post("/sync/trigger", follow_redirects=False)
         assert response.status_code == 303
         assert context.sync_triggered == 1
 
-    def test_trigger_gagal_tetap_mengalihkan_dengan_pesan(self) -> None:
-        client = make_client(FakeContext(fail={"trigger_sync"}))
+    def test_trigger_gagal_tetap_mengalihkan_dengan_pesan(
+        self, make_context: Callable[..., Any]
+    ) -> None:
+        client = make_client(make_context(fail={"trigger_sync"}))
         response = client.post("/sync/trigger", follow_redirects=False)
         assert response.status_code == 303
         assert "error=1" in response.headers["location"]
 
-    def test_ekspor_memanggil_agent(self) -> None:
-        context = FakeContext()
+    def test_ekspor_memanggil_agent(self, make_context: Callable[..., Any]) -> None:
+        context = make_context()
         client = make_client(context)
         response = client.post(
             "/export/start", data={"target": "/media/usb0"}, follow_redirects=False
@@ -178,8 +187,8 @@ class TestKontenOperasional:
     def test_media_tidak_bisa_ditulis_dinonaktifkan(self, client: TestClient) -> None:
         assert "tidak bisa ditulis" in client.get("/export").text
 
-    def test_tanpa_media_memberi_petunjuk(self) -> None:
-        client = make_client(FakeContext(empty=True))
+    def test_tanpa_media_memberi_petunjuk(self, make_context: Callable[..., Any]) -> None:
+        client = make_client(make_context(empty=True))
         assert "Colokkan USB" in client.get("/export").text
 
     def test_jaringan_menampilkan_keterjangkauan_central(self, client: TestClient) -> None:

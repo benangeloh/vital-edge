@@ -15,6 +15,7 @@ members = [
     "fleetview-contracts",
     "fleetview-edge-agent",
     "fleetview-edge-console",
+    "fleetview-usb-import",
 ]
 
 [[package]]
@@ -637,6 +638,23 @@ requires-dist = [
     { name = "fleetview-common", editable = "shared/common" },
     { name = "jinja2", specifier = ">=3.1" },
     { name = "python-multipart", specifier = ">=0.0.20" },
+]
+
+[[package]]
+name = "fleetview-usb-import"
+version = "0.1.0"
+source = { editable = "tools/usb_import" }
+dependencies = [
+    { name = "fleetview-common" },
+    { name = "fleetview-contracts" },
+    { name = "httpx" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "fleetview-common", editable = "shared/common" },
+    { name = "fleetview-contracts", editable = "shared/contracts" },
+    { name = "httpx", specifier = ">=0.28" },
 ]
 
 [[package]]

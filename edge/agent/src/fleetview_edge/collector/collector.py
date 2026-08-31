@@ -33,7 +33,7 @@ from fleetview_edge.collector.clock import CLOCK_ADJUSTED_TAG, CollectorClock
 from fleetview_edge.collector.supervisor import BackoffPolicy, ConnectionSupervisor
 from fleetview_edge.config.sensors import SensorRegistry
 from fleetview_edge.parser.parser import ParsedValue, TelemetryParser
-from fleetview_edge.protocol.base import ProtocolAdapter, RawPoint
+from fleetview_edge.protocol.base import ProtocolAdapter, ProtocolTimeoutError, RawPoint
 from fleetview_edge.validator.rules import SensorValidator
 
 __all__ = ["Collector", "CollectorStats", "TelemetrySink"]
@@ -232,6 +232,13 @@ class Collector:
             return []
         except ProtocolError as exc:
             self._stats.polls_failed += 1
+            # Timeout yang dilaporkan adapter dihitung sebagai timeout juga.
+            # Sebelumnya hanya `asyncio.TimeoutError` yang terhitung, sehingga
+            # penghitung ini selalu nol untuk adapter yang mendeteksi timeout-nya
+            # sendiri — dan adapter perangkat sungguhan justru begitu. Penghitung
+            # yang selalu nol lebih buruk daripada tidak ada penghitung.
+            if isinstance(exc, ProtocolTimeoutError):
+                self._stats.timeouts += 1
             self._supervisor.mark_disconnected(exc.code)
             log.warning(
                 "collector.poll_failed",

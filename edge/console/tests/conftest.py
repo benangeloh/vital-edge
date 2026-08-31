@@ -1,8 +1,16 @@
-"""Context palsu untuk menguji Console tanpa agent yang berjalan."""
+"""Context palsu untuk menguji Console tanpa agent yang berjalan.
+
+Berada di conftest, bukan modul terpisah: berkas test tidak membentuk paket
+(pytest memakai importmode=importlib), sehingga impor relatif tidak tersedia —
+dan menjadikannya paket akan bentrok dengan direktori `tests/` di akar repo.
+"""
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from typing import Any
+
+import pytest
 
 from fleetview_common import now_micros
 from fleetview_console.context import (
@@ -197,3 +205,18 @@ class FakeContext:
         self._guard("start_export")
         self.exports.append(target)
         return f"5 batch diekspor ke {target}"
+
+
+@pytest.fixture
+def make_context() -> Callable[..., FakeContext]:
+    """Factory context palsu.
+
+    Fixture, bukan impor langsung: pytest memakai importmode=importlib, sehingga
+    modul conftest tidak bisa diimpor lewat namanya — dan menjadikan direktori
+    test ini sebuah paket akan bentrok dengan `tests/` di akar repo.
+    """
+
+    def _make(**kwargs: Any) -> FakeContext:
+        return FakeContext(**kwargs)
+
+    return _make

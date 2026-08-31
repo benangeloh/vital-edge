@@ -345,3 +345,20 @@ class TestSiklusHidup:
 
         assert len(records) == 1
         assert len(sink.records) > before
+
+
+class TestPenghitungTimeout:
+    async def test_timeout_dari_adapter_ikut_terhitung(self, store: object = None) -> None:
+        """Adapter perangkat sungguhan mendeteksi timeout-nya sendiri dan
+        melempar ProtocolTimeoutError. Kalau hanya timeout asyncio yang dihitung,
+        penghitung di Console selalu nol padahal polling benar-benar timeout."""
+        _ = store
+        adapter = MockLPAAdapter({"ch_rpm": 700.0}, script=MockScript(timeout_on=[0, 1]))
+        sink = Sink()
+        c = _collector(adapter, _registry(_sensor()), sink)
+
+        await c.poll_once()
+        await c.poll_once()
+
+        assert c.stats.timeouts == 2
+        assert c.stats.polls_failed == 2
