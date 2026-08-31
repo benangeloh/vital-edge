@@ -170,7 +170,7 @@ class SyncEngine:
                     code=exc.code,
                     error=exc.message,
                     note="dikarantina; data tetap tersimpan lokal",
-                    **exc.details,
+                    details=exc.details,
                 )
                 return False
             except FleetViewError as exc:

@@ -22,8 +22,18 @@ lint: ## Lint kode Python
 typecheck: ## Type-check kode Python
 	uv run mypy .
 
-test: ## Jalankan test Python
+test: ## Jalankan test Python (integration di-skip bila layanan mati)
 	uv run pytest
+
+test-integration: up ## Jalankan integration test terhadap Postgres + InfluxDB sungguhan
+	uv run alembic -c central/api/alembic.ini upgrade head
+	uv run pytest -m integration
+
+migrate: ## Terapkan migrasi database
+	uv run alembic -c central/api/alembic.ini upgrade head
+
+migration: ## Buat migrasi baru: make migration M="pesan"
+	uv run alembic -c central/api/alembic.ini revision --autogenerate -m "$(M)"
 
 test-cov: ## Jalankan test dengan laporan coverage
 	uv run pytest --cov --cov-report=term-missing --cov-report=xml

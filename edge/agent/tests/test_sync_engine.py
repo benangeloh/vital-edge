@@ -129,7 +129,7 @@ class FakeTransport(TransportAdapter):
         )
 
 
-def _engine(store: OutboxStore, transport: TransportAdapter, **kw) -> SyncEngine:  # type: ignore[no-untyped-def]
+def _engine(store: OutboxStore, transport: TransportAdapter, **kw) -> SyncEngine:
     return SyncEngine(
         store=store,
         batcher=Batcher(store, max_records=kw.pop("max_records", 100)),

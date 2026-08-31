@@ -21,15 +21,15 @@ from __future__ import annotations
 import httpx
 
 from fleetview_common import get_logger, now_micros
-from fleetview_contracts import TelemetryRecord
+from fleetview_contracts import TelemetryRecord, encode_records
 from fleetview_edge.storage.base import (
     StorageHealth,
     StorageRejectedError,
+    StorageRetentionRejectedError,
     StorageState,
     StorageUnavailableError,
     TelemetryStore,
 )
-from fleetview_edge.storage.lineprotocol import encode_records
 from fleetview_edge.storage.retention import RetentionPolicy
 
 __all__ = ["InfluxTelemetryStore"]
@@ -142,6 +142,22 @@ class InfluxTelemetryStore(TelemetryStore):
             raise StorageUnavailableError(
                 f"InfluxDB menolak sementara (HTTP {response.status_code})",
                 details={**details, "retry_after": retry_after},
+            )
+
+        # InfluxDB memakai 422 juga untuk titik yang jatuh di luar retensi
+        # bucket. Bedakan, karena penyebab dan tindakannya sama sekali berbeda:
+        # payload salah bentuk adalah bug, sedangkan data di luar retensi berarti
+        # kapal offline lebih lama dari umur simpan lokalnya.
+        if "retention policy" in body.lower():
+            raise StorageRetentionRejectedError(
+                f"InfluxDB membuang titik di luar retensi bucket: {body}",
+                details={
+                    **details,
+                    "hint": (
+                        "retention_days harus setidaknya sepanjang durasi offline "
+                        "terburuk yang diperkirakan"
+                    ),
+                },
             )
 
         raise StorageRejectedError(

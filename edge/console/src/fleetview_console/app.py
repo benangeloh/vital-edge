@@ -68,7 +68,9 @@ def create_console_app(
         retryable jadi 400 supaya klien tahu percuma mengulang. Pembedaan yang
         sama dipakai Sync Engine.
         """
-        log.warning("console.error", code=exc.code, message=exc.message, **exc.details)
+        # details di-nest, bukan di-splat: kunci seperti "code" atau "message" di
+        # dalamnya akan bertabrakan dengan kwarg eksplisit dan mematikan handler.
+        log.warning("console.error", code=exc.code, message=exc.message, details=exc.details)
         return JSONResponse(
             status_code=503 if exc.retryable else 400,
             content={"ok": False, "data": None, "error": exc.to_dict(), "meta": {}},

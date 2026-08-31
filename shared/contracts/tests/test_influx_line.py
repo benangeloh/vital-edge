@@ -10,9 +10,14 @@ from __future__ import annotations
 
 from uuid import UUID
 
-from fleetview_contracts import AcquisitionSource, Quality, TelemetryRecord
-from fleetview_edge.storage import encode_record, encode_records
-from fleetview_edge.storage.lineprotocol import escape_field_string, escape_tag
+from fleetview_contracts import (
+    AcquisitionSource,
+    Quality,
+    TelemetryRecord,
+    encode_record,
+    encode_records,
+)
+from fleetview_contracts.influx_line import escape_field_string, escape_tag
 
 SHIP = UUID("11111111-1111-1111-1111-111111111111")
 DEVICE = UUID("22222222-2222-2222-2222-222222222222")

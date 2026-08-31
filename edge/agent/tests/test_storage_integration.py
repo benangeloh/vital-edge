@@ -16,6 +16,7 @@ from uuid import UUID
 
 import pytest
 
+from fleetview_common import now_micros
 from fleetview_contracts import AcquisitionSource, TelemetryRecord
 from fleetview_edge.collector import BackoffPolicy, Collector
 from fleetview_edge.config import load_sensor_registry
@@ -277,19 +278,47 @@ class TestInfluxSungguhan:
                 pytest.skip("InfluxDB tidak berjalan; jalankan 'make up'")
 
             await store.ensure_ready()
+
+            # Waktu sekarang, bukan konstanta: titik yang lebih tua dari retensi
+            # bucket ditolak InfluxDB dengan HTTP 422. Itu ditemukan justru saat
+            # menguji terhadap database sungguhan — mock tidak memunculkannya.
+            now = now_micros()
             records: list[TelemetryRecord] = [
                 TelemetryRecord(
                     ship_id=SHIP,
                     device_id=DEVICE,
-                    sensor_id="me_port_rpm",
-                    sequence_number=1,
-                    timestamp=1_756_612_800_000_000,
-                    metric="rpm",
+                    sensor_id=f"sensor_{metric}",
+                    sequence_number=i,
+                    timestamp=now + i * 1_000_000,
+                    metric=metric,
                     values={"value": 742.5},
                     unit="rpm",
                 )
+                for i, metric in enumerate(
+                    ["rpm", "fuel_level", "pressure", "temperature"], start=1
+                )
             ]
             await store.write(records)
+
+            # Baca kembali. Inilah yang membuktikan enkoder line protocol kita
+            # benar-benar diterima InfluxDB asli — bukan sekadar tidak ditolak.
+            async with httpx.AsyncClient(timeout=15.0) as client:
+                resp = await client.post(
+                    "http://localhost:8086/api/v2/query",
+                    params={"org": "fleetview"},
+                    headers={
+                        "Authorization": "Token fleetview-dev-token",
+                        "Content-Type": "application/vnd.flux",
+                        "Accept": "application/csv",
+                    },
+                    content=(
+                        'from(bucket:"telemetry") |> range(start:-1h) '
+                        f'|> filter(fn:(r) => r.ship_id == "{SHIP}")'
+                    ),
+                )
+            assert resp.status_code == 200, resp.text
+            for metric in ("rpm", "fuel_level", "pressure", "temperature"):
+                assert f"sensor_{metric}" in resp.text, f"{metric} tidak terbaca kembali"
         except httpx.HTTPError:
             pytest.skip("InfluxDB tidak bisa dijangkau")
         finally:

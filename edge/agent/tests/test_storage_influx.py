@@ -42,7 +42,7 @@ def _records(n: int = 1) -> list[TelemetryRecord]:
     ]
 
 
-def _store(handler) -> InfluxTelemetryStore:  # type: ignore[no-untyped-def]
+def _store(handler) -> InfluxTelemetryStore:
     client = httpx.AsyncClient(
         transport=httpx.MockTransport(handler),
         base_url="http://influx.test",

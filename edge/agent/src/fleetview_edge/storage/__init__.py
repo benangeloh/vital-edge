@@ -5,9 +5,11 @@ Collector dan InfluxDB, dan menjamin satu hal: kegagalan penyimpanan tidak
 pernah menghentikan akuisisi.
 """
 
+from fleetview_contracts import encode_record, encode_records
 from fleetview_edge.storage.base import (
     StorageHealth,
     StorageRejectedError,
+    StorageRetentionRejectedError,
     StorageState,
     StorageUnavailableError,
     TelemetryStore,
@@ -20,7 +22,6 @@ from fleetview_edge.storage.cardinality import (
     verify_tag_keys,
 )
 from fleetview_edge.storage.influx import InfluxTelemetryStore
-from fleetview_edge.storage.lineprotocol import encode_record, encode_records
 from fleetview_edge.storage.memory import InMemoryTelemetryStore
 from fleetview_edge.storage.retention import RetentionPolicy
 from fleetview_edge.storage.writer import StorageWriter
@@ -34,6 +35,7 @@ __all__ = [
     "RetentionPolicy",
     "StorageHealth",
     "StorageRejectedError",
+    "StorageRetentionRejectedError",
     "StorageState",
     "StorageUnavailableError",
     "StorageWriter",

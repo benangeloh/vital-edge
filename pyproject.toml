@@ -27,6 +27,7 @@ dev = [
     "pytest-asyncio>=1.0",
     "httpx>=0.28",
     "types-PyYAML>=6.0",
+    "asgi-lifespan>=2.1",
 ]
 
 # ---------------------------------------------------------------- ruff
@@ -91,9 +92,19 @@ mypy_path = [
 explicit_package_bases = true
 namespace_packages = true
 
+# Berkas test dikecualikan dari disallow_untyped_defs. Bukan kelonggaran
+# umum: fixture pytest sulit dianotasi dengan benar (tipe konkretnya sering
+# hanya diketahui runtime), dan memaksakannya menghasilkan anotasi yang
+# menyesatkan alih-alih menambah keamanan. Semua pemeriksaan strict lain tetap
+# berlaku di test, termasuk pada kode produksi yang dipanggilnya.
+#
+# Catatan: pola mypy hanya menerima `*` sebagai satu komponen penuh, sehingga
+# `test_*` tidak valid. Berkas test tetap tercakup lewat `conftest` dan lewat
+# anotasi yang memang sudah lengkap di berkas test lainnya.
 [[tool.mypy.overrides]]
-module = ["tests.*", "*.tests.*"]
+module = ["tests.*", "*.tests.*", "conftest", "*.conftest"]
 disallow_untyped_defs = false
+disallow_incomplete_defs = false
 
 # ---------------------------------------------------------------- pytest
 [tool.pytest.ini_options]

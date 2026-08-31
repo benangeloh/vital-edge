@@ -59,7 +59,7 @@ def _ack_body(batch_id: UUID = BATCH) -> dict[str, object]:
     }
 
 
-def _transport(handler, **kw) -> NetworkTransport:  # type: ignore[no-untyped-def]
+def _transport(handler, **kw) -> NetworkTransport:
     return NetworkTransport(
         base_url="http://central.test",
         client=httpx.AsyncClient(

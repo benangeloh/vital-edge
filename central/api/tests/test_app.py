@@ -89,3 +89,39 @@ class TestPemetaanError:
         assert r.status_code == 500
         assert "rahasia" not in r.text
         assert r.json()["error"]["code"] == "internal.unexpected"
+
+
+class TestHandlerTahanTabrakanKwarg:
+    """Regresi: `**exc.details` dulu bertabrakan dengan kwarg eksplisit logger.
+
+    Error ingest membawa `details={"status": ...}`, dan itu membuat exception
+    handler sendiri crash — 400 yang bersih berubah menjadi 500 beserta stack
+    trace. Hanya muncul saat server sungguhan dijalankan, bukan di unit test.
+    """
+
+    def _client(self, exc: Exception, settings: ApiSettings) -> TestClient:
+        app = create_app(settings)
+
+        @app.get("/boom")
+        async def boom() -> None:
+            raise exc
+
+        return TestClient(app, raise_server_exceptions=False)
+
+    @pytest.mark.parametrize(
+        "details",
+        [
+            {"status": 422},
+            {"code": "lain"},
+            {"message": "lain"},
+            {"retryable": True},
+            {"status": 1, "code": "x", "message": "y", "retryable": False},
+        ],
+    )
+    def test_details_bentrok_tetap_menghasilkan_400(
+        self, details: dict[str, object], settings: ApiSettings
+    ) -> None:
+        exc = ValidationError("rusak", details=details)
+        r = self._client(exc, settings).get("/boom")
+        assert r.status_code == 400
+        assert r.json()["error"]["code"] == "validation.failed"

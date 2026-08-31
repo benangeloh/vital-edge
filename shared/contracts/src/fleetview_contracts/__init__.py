@@ -17,6 +17,7 @@ from fleetview_contracts.enums import (
 )
 from fleetview_contracts.export import ExportedBatch, ExportManifest
 from fleetview_contracts.heartbeat import EdgeHealth, Heartbeat, HeartbeatResponse
+from fleetview_contracts.influx_line import encode_reading, encode_record, encode_records
 from fleetview_contracts.reading import FieldValue, Reading
 from fleetview_contracts.sync import Ack, SyncState, UploadSession
 from fleetview_contracts.telemetry import TelemetryRecord
@@ -44,4 +45,7 @@ __all__ = [
     "TelemetryRecord",
     "Transport",
     "UploadSession",
+    "encode_reading",
+    "encode_record",
+    "encode_records",
 ]

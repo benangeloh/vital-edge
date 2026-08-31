@@ -117,7 +117,7 @@ class StorageWriter:
                 error=exc.message,
                 rejected_total=self._rejected,
                 note="DATA DIBUANG: penyimpanan menolak permanen, mengulang tidak menolong",
-                **exc.details,
+                details=exc.details,
             )
         except FleetViewError as exc:
             self._buffered_total += len(records)

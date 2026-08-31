@@ -38,13 +38,17 @@ def register_error_handlers(app: FastAPI) -> None:
     @app.exception_handler(FleetViewError)
     async def _domain_error(_request: Request, exc: FleetViewError) -> JSONResponse:
         status = _status_for(exc)
+        # `details` di-nest, bukan di-splat. Splat akan bertabrakan dengan
+        # kwarg eksplisit di atas — `details={"status": ...}` dari error ingest
+        # membuat handler ini sendiri crash, dan 400 yang bersih berubah jadi
+        # 500 beserta stack trace. Ditemukan saat menjalankan server sungguhan.
         log.warning(
             "api.domain_error",
             code=exc.code,
             message=exc.message,
             status=status,
             retryable=exc.retryable,
-            **exc.details,
+            details=exc.details,
         )
         return JSONResponse(
             status_code=status,

@@ -1,4 +1,9 @@
-"""Enkode TelemetryRecord menjadi InfluxDB line protocol.
+"""Enkode telemetry menjadi InfluxDB line protocol.
+
+Berada di `shared/` karena **edge dan central wajib menulis skema yang identik**.
+Kalau keduanya menyimpang — satu tag berbeda, satu urutan berbeda — data dari
+kapal tidak akan menyatu dengan data yang ditulis di pusat, dan itu baru
+ketahuan saat ada yang mencoba mem-query-nya berminggu-minggu kemudian.
 
 Ditulis sendiri, bukan memakai `influxdb-client`, karena dua alasan:
 
@@ -15,9 +20,18 @@ Referensi: InfluxDB v2 line protocol.
 
 from __future__ import annotations
 
-from fleetview_contracts import TelemetryRecord
+from uuid import UUID
 
-__all__ = ["encode_record", "encode_records", "escape_field_string", "escape_tag"]
+from fleetview_contracts.reading import Reading
+from fleetview_contracts.telemetry import TelemetryRecord
+
+__all__ = [
+    "encode_reading",
+    "encode_record",
+    "encode_records",
+    "escape_field_string",
+    "escape_tag",
+]
 
 # Line protocol menuntut escaping yang berbeda di setiap posisi. Salah satu
 # alasan enkoder ini ditulis sendiri adalah supaya aturannya kelihatan dan
@@ -104,3 +118,27 @@ def encode_record(record: TelemetryRecord) -> str:
 def encode_records(records: list[TelemetryRecord]) -> str:
     """Ubah banyak record menjadi satu payload line protocol."""
     return "\n".join(encode_record(r) for r in records)
+
+
+def encode_reading(reading: Reading, *, ship_id: str, device_id: str) -> str:
+    """Enkode pembacaan bentuk wire, dengan identitas dari envelope batch.
+
+    Dipakai central saat menyimpan batch yang masuk. Hasilnya identik dengan
+    `encode_record` untuk data yang sama — itulah yang membuat data dari kapal
+    menyatu dengan skema di pusat.
+    """
+    return encode_record(
+        TelemetryRecord(
+            ship_id=UUID(ship_id),
+            device_id=UUID(device_id),
+            sensor_id=reading.sensor_id,
+            sequence_number=reading.seq,
+            timestamp=reading.ts,
+            metric=reading.measurement,
+            values=dict(reading.fields),
+            unit=reading.unit,
+            quality=reading.quality,
+            source=reading.source,
+            tags=dict(reading.tags),
+        )
+    )

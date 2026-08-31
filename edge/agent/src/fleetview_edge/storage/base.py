@@ -12,6 +12,7 @@ from fleetview_contracts import TelemetryRecord
 __all__ = [
     "StorageHealth",
     "StorageRejectedError",
+    "StorageRetentionRejectedError",
     "StorageState",
     "StorageUnavailableError",
     "TelemetryStore",
@@ -45,6 +46,29 @@ class StorageRejectedError(StorageError):
     """
 
     code = "storage.rejected"
+    retryable = False
+
+
+class StorageRetentionRejectedError(StorageRejectedError):
+    """Titik data lebih tua dari retensi bucket, jadi InfluxDB membuangnya.
+
+    Ditemukan saat menguji terhadap InfluxDB sungguhan; mock tidak pernah
+    memunculkannya. Konsekuensinya operasional dan serius:
+
+    **Kalau sebuah kapal offline lebih lama dari retensi lokal, data tertuanya
+    tidak bisa disimpan di InfluxDB lokal sama sekali.** InfluxDB menolaknya
+    dengan HTTP 422, dan penolakan itu permanen — mengulang tidak menolong.
+
+    Karena itu `storage.retention_days` harus setidaknya sepanjang durasi
+    offline terburuk yang diperkirakan. Dengan asumsi 30 hari di
+    docs/architecture/00-assessment.md, default 90 hari memberi margin lebar.
+
+    Perhatikan juga: InfluxDB melakukan **partial write** — sebagian titik dalam
+    satu payload bisa tersimpan sementara sisanya dibuang. Jadi error ini tidak
+    berarti seluruh batch gagal.
+    """
+
+    code = "storage.outside_retention"
     retryable = False
 
 
