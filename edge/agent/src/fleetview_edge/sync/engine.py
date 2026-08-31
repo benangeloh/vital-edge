@@ -82,6 +82,12 @@ class SyncEngine:
     def stats(self) -> SyncStats:
         return self._stats
 
+    @property
+    def manager(self) -> NetworkManager:
+        """Pemilih transport. Publik karena Console dan Health Monitor perlu
+        melaporkan link mana yang tersedia dan berapa kuota yang terpakai."""
+        return self._manager
+
     def stop(self) -> None:
         self._stopping.set()
 

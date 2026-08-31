@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+{% block title %}Ikhtisar{% endblock %}
+{% block content %}
+<h1 class="h1">Ikhtisar</h1>
+
+<section class="card">
+  <h2 class="h2">Identitas</h2>
+  <dl class="kv">
+    <dt>Kapal</dt><dd>{{ ship_name or "—" }}</dd>
+    <dt>Ship ID</dt><dd class="mono">{{ ship_id or "—" }}</dd>
+    <dt>Device ID</dt><dd class="mono">{{ system.device_id if system else "—" }}</dd>
+    <dt>Versi agent</dt><dd class="mono">{{ agent_version or "—" }}</dd>
+    <dt>Versi config</dt><dd class="mono">{{ system.config_version if system else "—" }}</dd>
+  </dl>
+</section>
+
+<section class="card" id="system" data-refresh="/partials/system" data-interval="5000">
+  <h2 class="h2">Kesehatan sistem</h2>
+  {% include "partials/system.html" %}
+</section>
+
+<section class="card">
+  <h2 class="h2">Sinkronisasi</h2>
+  {% if sync_error %}
+    <p class="err" role="alert">Tidak bisa membaca status sync: {{ sync_error }}</p>
+  {% elif sync %}
+    <dl class="kv">
+      <dt>Data tertunda</dt>
+      <dd class="tabular {% if sync.pending_records > 10000 %}is-warn{% endif %}">
+        {{ sync.pending_records | number }} record
+      </dd>
+      <dt>Tertua belum terkirim</dt>
+      <dd class="tabular">{{ sync.oldest_pending_age_seconds | duration }}</dd>
+      <dt>Sync berhasil terakhir</dt>
+      <dd class="tabular">{{ sync.last_success_us | relative_us }} lalu</dd>
+      <dt>Transport aktif</dt>
+      <dd>{{ sync.active_transport or "tidak ada" }}</dd>
+    </dl>
+    {% if sync.quarantined_batches %}
+      <p class="warn">
+        {{ sync.quarantined_batches }} batch dikarantina. Datanya masih tersimpan
+        dan tidak dihapus, tetapi berhenti dicoba ulang.
+      </p>
+    {% endif %}
+    <a href="/sync" class="btn">Buka halaman sinkronisasi</a>
+  {% endif %}
+</section>
+{% endblock %}

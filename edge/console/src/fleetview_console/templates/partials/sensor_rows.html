@@ -1,0 +1,59 @@
+{% if error %}
+  <p class="err" role="alert">Tidak bisa membaca sensor: {{ error }}</p>
+{% elif not sensors %}
+  <p class="empty">Belum ada sensor terbaca. Periksa sambungan perangkat lapangan.</p>
+{% else %}
+  <table class="table">
+    <caption class="sr-only">Daftar sensor beserta nilai terakhir dan kualitasnya</caption>
+    <thead>
+      <tr>
+        <th scope="col">Sensor</th>
+        <th scope="col">Nilai</th>
+        <th scope="col">Kualitas</th>
+        <th scope="col">Terakhir</th>
+        <th scope="col">Sambungan</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for s in sensors %}
+      <tr>
+        <th scope="row">
+          <span class="mono">{{ s.sensor_id }}</span>
+          <span class="sub">{{ s.metric }}{% if s.tags %} · {{ s.tags.values() | join(" ") }}{% endif %}</span>
+        </th>
+        <td class="num tabular">
+          {%- if s.value is not none -%}
+            {{ s.value }}{% if s.unit %} <span class="unit">{{ s.unit }}</span>{% endif %}
+          {%- elif s.values -%}
+            {# Sensor multi-field seperti GPS: tampilkan semua field, bukan strip. #}
+            {% for name, v in s.values.items() -%}
+              <span class="multi"><span class="unit">{{ name }}</span> {{ v }}</span>
+            {%- endfor %}
+          {%- else -%}
+            —
+          {%- endif -%}
+        </td>
+        <td>
+          {% if s.quality == "good" %}
+            <span class="chip chip--ok">● baik</span>
+          {% elif s.quality == "stale" %}
+            <span class="chip chip--warn">◐ basi</span>
+          {% elif s.quality == "suspect" %}
+            <span class="chip chip--warn">◐ mencurigakan</span>
+          {% else %}
+            <span class="chip chip--idle">○ {{ s.quality }}</span>
+          {% endif %}
+        </td>
+        <td class="num tabular">{{ s.last_update_us | relative_us }}</td>
+        <td>
+          {% if s.connected %}
+            <span class="chip chip--ok">● tersambung</span>
+          {% else %}
+            <span class="chip chip--crit">▲ putus</span>
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+{% endif %}

@@ -1,0 +1,84 @@
+{% extends "base.html" %}
+{% block title %}Sinkronisasi{% endblock %}
+{% block content %}
+<h1 class="h1">Sinkronisasi</h1>
+
+{% if request.query_params.get("triggered") %}
+  <p class="ok" role="status">Permintaan sinkronisasi dikirim.</p>
+{% elif request.query_params.get("error") %}
+  <p class="err" role="alert">Permintaan sinkronisasi gagal. Periksa log.</p>
+{% endif %}
+
+{% if error %}
+  <p class="err" role="alert">Tidak bisa membaca status sync: {{ error }}</p>
+{% elif sync %}
+<section class="card">
+  <h2 class="h2">Keadaan sekarang</h2>
+  <dl class="kv">
+    <dt>Sync berhasil terakhir</dt>
+    <dd class="tabular">{{ sync.last_success_us | relative_us }} lalu</dd>
+    <dt>Data tertunda</dt>
+    <dd class="tabular {% if sync.pending_records > 10000 %}is-warn{% endif %}">
+      {{ sync.pending_records | number }} record dalam {{ sync.pending_batches | number }} batch
+    </dd>
+    <dt>Tertua belum terkirim</dt>
+    <dd class="tabular">{{ sync.oldest_pending_age_seconds | duration }}</dd>
+    <dt>Transport aktif</dt>
+    <dd>{{ sync.active_transport or "tidak ada" }}</dd>
+    <dt>Total tersetor</dt>
+    <dd class="tabular">{{ sync.records_synced | number }} record · {{ sync.bytes_sent | bytes_human }}</dd>
+  </dl>
+
+  {% if sync.last_error %}
+    <p class="warn">Kesalahan terakhir: {{ sync.last_error }}</p>
+  {% endif %}
+
+  {% if sync.quarantined_batches %}
+    <p class="warn">
+      {{ sync.quarantined_batches }} batch dikarantina setelah gagal berulang.
+      <strong>Datanya tidak dihapus</strong> — hanya berhenti dicoba supaya tidak
+      menyumbat antrean.
+    </p>
+  {% endif %}
+
+  <!-- Form POST biasa: tombol ini harus bekerja meski JavaScript mati. -->
+  <form method="post" action="/sync/trigger">
+    <button type="submit" class="btn btn--primary">Sinkronkan sekarang</button>
+  </form>
+</section>
+
+<section class="card">
+  <h2 class="h2">Transport</h2>
+  {% if not sync.transports %}
+    <p class="empty">Belum ada informasi transport.</p>
+  {% else %}
+  <table class="table">
+    <thead>
+      <tr>
+        <th scope="col">Transport</th>
+        <th scope="col">Tersedia</th>
+        <th scope="col">Prioritas maks</th>
+        <th scope="col">Kuota terpakai</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for t in sync.transports %}
+      <tr>
+        <th scope="row">{{ t.transport }}</th>
+        <td>
+          {% if t.available %}<span class="chip chip--ok">● siap</span>
+          {% else %}<span class="chip chip--idle">○ tidak tersedia</span>{% endif %}
+        </td>
+        <td class="tabular">{{ t.max_priority }}</td>
+        <td class="tabular">
+          {{ t.bytes_used | bytes_human }}
+          {% if t.budget_exhausted %}<span class="chip chip--warn">◐ kuota habis</span>{% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% endif %}
+</section>
+{% endif %}
+{% endblock %}

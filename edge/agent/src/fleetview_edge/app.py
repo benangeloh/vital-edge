@@ -14,6 +14,7 @@ from fleetview_console import create_console_app
 from fleetview_contracts import AcquisitionSource
 from fleetview_edge.collector import BackoffPolicy, Collector, CollectorClock
 from fleetview_edge.config import SensorRegistry, load_sensor_registry
+from fleetview_edge.console_context import AgentConsoleContext
 from fleetview_edge.protocol import (
     LPA104Adapter,
     MockLPAAdapter,
@@ -146,15 +147,33 @@ class EdgeAgent:
             retry_batch_size=cfg.buffer_retry_batch_size,
         )
 
-    def build_console(self) -> FastAPI:
+    def build_console(
+        self,
+        *,
+        collector: object = None,
+        storage: object = None,
+        sync_engine: object = None,
+    ) -> FastAPI:
         """Bangun aplikasi Edge Console.
 
         Console adalah package terpisah dengan test dan batasnya sendiri, tetapi
         berjalan di dalam proses yang sama dengan agent. Itu keputusan sadar:
         Raspberry Pi tidak perlu proses kedua, port kedua, dan unit systemd kedua
-        hanya untuk menyajikan dua belas panel status.
+        hanya untuk menyajikan panel status.
+
+        Komponen boleh None — Console dibuka justru saat sesuatu belum atau gagal
+        dirakit, dan bagian yang hilang ditampilkan sebagai "tidak diketahui"
+        alih-alih menjatuhkan halaman.
         """
+        context = AgentConsoleContext(
+            settings=self.settings,
+            agent_version=self.version,
+            collector=collector,  # type: ignore[arg-type]
+            storage=storage,  # type: ignore[arg-type]
+            sync_engine=sync_engine,  # type: ignore[arg-type]
+        )
         return create_console_app(
+            context=context,
             ship_name=self.settings.ship.ship_name,
             ship_id=str(self.settings.ship.ship_id),
             agent_version=self.version,

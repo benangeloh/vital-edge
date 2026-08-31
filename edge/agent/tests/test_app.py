@@ -59,7 +59,7 @@ def test_build_console_menghasilkan_app_yang_bisa_melayani() -> None:
 
     body = TestClient(app).get("/api/health").json()
     assert body["ok"] is True
-    assert body["data"]["ship_name"] == "KM Uji Coba"
+    assert body["data"]["ship_id"] == _SHIP["ship_id"]
     assert body["data"]["agent_version"] == AGENT_VERSION
 
 

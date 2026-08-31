@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+{% block title %}Ekspor Data{% endblock %}
+{% block content %}
+<h1 class="h1">Ekspor Data</h1>
+<p class="lead">
+  Ekspor menulis paket portabel ke media lepas-pasang.
+  <strong>Data lokal tidak dihapus</strong> — batch tetap tertunda sampai central
+  mengonfirmasi penerimaannya, jadi flashdisk yang hilang tidak menghilangkan apa pun.
+</p>
+
+{% if request.query_params.get("started") %}
+  <p class="ok" role="status">Ekspor dimulai. Jangan cabut media sampai selesai.</p>
+{% elif request.query_params.get("error") %}
+  <p class="err" role="alert">Ekspor gagal dimulai. Periksa log.</p>
+{% endif %}
+
+<section class="card">
+  <h2 class="h2">Media terdeteksi</h2>
+  {% if error %}
+    <p class="err" role="alert">Tidak bisa memeriksa media: {{ error }}</p>
+  {% elif not targets %}
+    <p class="empty">Tidak ada media terdeteksi. Colokkan USB atau HDD lalu muat ulang halaman.</p>
+  {% else %}
+    <form method="post" action="/export/start" class="export">
+      {% for t in targets %}
+      <label class="option{% if not t.writable %} option--off{% endif %}">
+        <input type="radio" name="target" value="{{ t.path }}"
+               {% if loop.first and t.writable %}checked{% endif %}
+               {% if not t.writable %}disabled{% endif %}>
+        <span class="option__body">
+          <span class="option__label">{{ t.label }}</span>
+          <span class="option__note mono">{{ t.path }}</span>
+          <span class="option__note">
+            {{ t.free_bytes | bytes_human }} bebas
+            {% if not t.writable %} · tidak bisa ditulis{% endif %}
+          </span>
+        </span>
+      </label>
+      {% endfor %}
+
+      {% if sync %}
+      <p class="hint">
+        Perkiraan yang akan diekspor: {{ sync.pending_records | number }} record
+        dalam {{ sync.pending_batches | number }} batch.
+      </p>
+      {% endif %}
+
+      <button type="submit" class="btn btn--primary">Mulai ekspor</button>
+    </form>
+  {% endif %}
+</section>
+
+<section class="card">
+  <h2 class="h2">Isi paket</h2>
+  <pre class="tree">SHIP-xxx/
+  manifest.json    identitas, rentang, jumlah, checksum keseluruhan
+  telemetry/       berkas batch, byte-nya identik dengan kiriman jaringan
+  checksums/       sha256 per berkas, untuk memverifikasi media</pre>
+  <p class="hint">
+    Alat impor di kantor memverifikasi seluruh checksum sebelum satu byte pun
+    dipercaya, lalu mengirimnya ke endpoint ingest yang sama dengan jalur jaringan.
+  </p>
+</section>
+{% endblock %}

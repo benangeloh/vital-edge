@@ -111,6 +111,7 @@ class Collector:
         )
         self._stats = CollectorStats()
         self._stopping = asyncio.Event()
+        self._latest: dict[str, TelemetryRecord] = {}
         self._next_due_us: dict[str, int] = {}
         """sensor_id -> kapan record berikutnya boleh dipancarkan.
 
@@ -127,6 +128,20 @@ class Collector:
     @property
     def clock(self) -> CollectorClock:
         return self._clock
+
+    @property
+    def registry(self) -> SensorRegistry:
+        return self._registry
+
+    @property
+    def latest_readings(self) -> dict[str, TelemetryRecord]:
+        """Record terakhir per sensor, untuk Edge Console.
+
+        Disimpan terpisah dari jalur data supaya halaman Sensor tidak perlu
+        meng-query InfluxDB — Console harus tetap bisa menampilkan nilai terakhir
+        justru ketika InfluxDB sedang bermasalah.
+        """
+        return dict(self._latest)
 
     def _on_reconnect(self) -> None:
         # Setelah putus lama, nilai sebelumnya sudah tidak relevan. Menyimpannya
@@ -231,6 +246,8 @@ class Collector:
         self._stats.polls_succeeded += 1
 
         if records:
+            for record in records:
+                self._latest[record.sensor_id] = record
             await self._sink(records)
             self._stats.records_emitted += len(records)
 

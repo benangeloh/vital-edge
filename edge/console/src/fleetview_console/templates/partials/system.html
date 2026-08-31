@@ -1,0 +1,84 @@
+{% if system_error %}
+  <p class="err" role="alert">Tidak bisa membaca status sistem: {{ system_error }}</p>
+{% elif system %}
+  <div class="grid">
+    <div class="stat">
+      <span class="stat__label">Collector</span>
+      {% if system.collector_healthy is none %}
+        <span class="chip chip--idle">○ tidak diketahui</span>
+      {% elif system.collector_healthy %}
+        <span class="chip chip--ok">● berjalan</span>
+      {% else %}
+        <span class="chip chip--crit">▲ berhenti</span>
+      {% endif %}
+      {% if system.collector_detail %}<span class="stat__note">{{ system.collector_detail }}</span>{% endif %}
+    </div>
+
+    <div class="stat">
+      <span class="stat__label">{{ system.protocol_name or "Perangkat lapangan" }}</span>
+      {% if system.protocol_link == "connected" %}
+        <span class="chip chip--ok">● tersambung</span>
+      {% elif system.protocol_link in ("degraded",) %}
+        <span class="chip chip--warn">◐ terganggu</span>
+      {% elif system.protocol_link %}
+        <span class="chip chip--crit">▲ {{ system.protocol_link }}</span>
+      {% else %}
+        <span class="chip chip--idle">○ tidak diketahui</span>
+      {% endif %}
+      {% if system.protocol_detail %}<span class="stat__note">{{ system.protocol_detail }}</span>{% endif %}
+    </div>
+
+    <div class="stat">
+      <span class="stat__label">InfluxDB</span>
+      {% if system.storage_healthy is none %}
+        <span class="chip chip--idle">○ tidak diketahui</span>
+      {% elif system.storage_healthy %}
+        <span class="chip chip--ok">● sehat</span>
+      {% else %}
+        <span class="chip chip--crit">▲ bermasalah</span>
+      {% endif %}
+      {% if system.storage_detail %}<span class="stat__note">{{ system.storage_detail }}</span>{% endif %}
+    </div>
+
+    <div class="stat">
+      <span class="stat__label">Penyimpanan</span>
+      <span class="stat__value tabular">{{ system.disk_used_percent | percent }}</span>
+      <span class="stat__note">{{ system.disk_free_bytes | bytes_human }} tersisa</span>
+      {% if system.disk_used_percent is not none %}
+        <div class="meter" role="img"
+             aria-label="Disk terpakai {{ system.disk_used_percent | percent }}">
+          <span class="meter__fill{% if system.disk_used_percent >= 90 %} meter__fill--crit
+                {% elif system.disk_used_percent >= 80 %} meter__fill--warn{% endif %}"
+                style="width: {{ system.disk_used_percent }}%"></span>
+        </div>
+      {% endif %}
+    </div>
+
+    <div class="stat">
+      <span class="stat__label">CPU</span>
+      <span class="stat__value tabular">{{ system.cpu_percent | percent }}</span>
+    </div>
+
+    <div class="stat">
+      <span class="stat__label">Memori</span>
+      <span class="stat__value tabular">{{ system.memory_percent | percent }}</span>
+    </div>
+
+    <div class="stat">
+      <span class="stat__label">Suhu</span>
+      <span class="stat__value tabular
+            {% if system.temperature_celsius and system.temperature_celsius >= 80 %}is-crit
+            {% elif system.temperature_celsius and system.temperature_celsius >= 70 %}is-warn{% endif %}">
+        {{ system.temperature_celsius | measure(" °C") }}
+      </span>
+      {% if system.temperature_celsius and system.temperature_celsius >= 80 %}
+        <span class="stat__note">Pi kemungkinan sudah throttle</span>
+      {% endif %}
+    </div>
+
+    <div class="stat">
+      <span class="stat__label">Uptime perangkat</span>
+      <span class="stat__value tabular">{{ system.uptime_seconds | duration }}</span>
+    </div>
+  </div>
+{% endif %}

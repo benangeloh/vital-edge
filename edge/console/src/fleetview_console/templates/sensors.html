@@ -1,0 +1,13 @@
+{% extends "base.html" %}
+{% block title %}Sensor{% endblock %}
+{% block content %}
+<h1 class="h1">Sensor</h1>
+<p class="lead">
+  Nilai yang buruk tetap disimpan dan ditandai, tidak dibuang — supaya sensor
+  rusak bisa dibedakan dari data yang memang tidak ada.
+</p>
+
+<section class="card card--flush" id="sensors" data-refresh="/partials/sensors" data-interval="5000">
+  {% include "partials/sensor_rows.html" %}
+</section>
+{% endblock %}

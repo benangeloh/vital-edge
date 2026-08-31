@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+{% block title %}Log{% endblock %}
+{% block content %}
+<h1 class="h1">Log</h1>
+
+<!-- Penyaring berupa tautan biasa, bukan tombol JavaScript: hasilnya bisa
+     di-bookmark dan tetap bekerja tanpa skrip. -->
+<nav class="filters" aria-label="Saring berdasarkan tingkat">
+  {% for value, label in [("", "Semua"), ("info", "Info"), ("warning", "Peringatan"), ("error", "Error")] %}
+    <a href="/logs{% if value %}?level={{ value }}{% endif %}"
+       class="chip-link{% if level == value %} chip-link--on{% endif %}"
+       {% if level == value %}aria-current="true"{% endif %}>{{ label }}</a>
+  {% endfor %}
+</nav>
+
+<section class="card card--flush">
+  {% if error %}
+    <p class="err" role="alert">Tidak bisa membaca log: {{ error }}</p>
+  {% elif not entries %}
+    <p class="empty">Tidak ada entri log pada penyaring ini.</p>
+  {% else %}
+  <table class="table table--logs">
+    <caption class="sr-only">Entri log terbaru</caption>
+    <thead>
+      <tr>
+        <th scope="col">Waktu</th>
+        <th scope="col">Tingkat</th>
+        <th scope="col">Komponen</th>
+        <th scope="col">Pesan</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for e in entries %}
+      <tr class="log log--{{ e.level | lower }}">
+        <td class="num tabular mono">{{ e.timestamp_us | relative_us }}</td>
+        <td>
+          {% if e.level | lower == "error" %}<span class="chip chip--crit">▲ error</span>
+          {% elif e.level | lower == "warning" %}<span class="chip chip--warn">◐ warning</span>
+          {% else %}<span class="chip chip--idle">○ {{ e.level | lower }}</span>{% endif %}
+        </td>
+        <td class="mono sub">{{ e.component }}</td>
+        <td>
+          {{ e.message }}
+          {% if e.detail %}<span class="sub mono">{{ e.detail }}</span>{% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% endif %}
+</section>
+{% endblock %}

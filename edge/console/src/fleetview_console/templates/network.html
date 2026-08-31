@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+{% block title %}Jaringan{% endblock %}
+{% block content %}
+<h1 class="h1">Jaringan</h1>
+<p class="lead">
+  Sebuah link dianggap tersedia hanya kalau central benar-benar bisa dijangkau
+  lewatnya. Wi-Fi kapal yang berhasil <em>associate</em> tetapi tidak punya rute
+  adalah kasus paling sering, dan pemeriksaan tingkat antarmuka melaporkannya
+  sebagai sehat.
+</p>
+
+<section class="card card--flush">
+  {% if error %}
+    <p class="err" role="alert">Tidak bisa membaca status jaringan: {{ error }}</p>
+  {% elif not links %}
+    <p class="empty">Tidak ada antarmuka jaringan terdeteksi.</p>
+  {% else %}
+  <table class="table">
+    <caption class="sr-only">Antarmuka jaringan dan keterjangkauan central</caption>
+    <thead>
+      <tr>
+        <th scope="col">Antarmuka</th>
+        <th scope="col">Status</th>
+        <th scope="col">Alamat IP</th>
+        <th scope="col">Central</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for l in links %}
+      <tr>
+        <th scope="row">
+          {{ l.name }}
+          <span class="sub">{{ l.kind }}</span>
+        </th>
+        <td>
+          {% if l.available %}<span class="chip chip--ok">● aktif</span>
+          {% else %}<span class="chip chip--idle">○ tidak aktif</span>{% endif %}
+        </td>
+        <td class="mono">{{ l.ip_address or "—" }}</td>
+        <td>
+          {% if l.central_reachable is none %}
+            <span class="chip chip--idle">○ belum diuji</span>
+          {% elif l.central_reachable %}
+            <span class="chip chip--ok">● terjangkau</span>
+          {% else %}
+            <span class="chip chip--crit">▲ tidak terjangkau</span>
+          {% endif %}
+          {% if l.detail %}<span class="sub">{{ l.detail }}</span>{% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% endif %}
+</section>
+{% endblock %}

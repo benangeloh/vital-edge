@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% block title %}Konfigurasi{% endblock %}
+{% block content %}
+<h1 class="h1">Konfigurasi</h1>
+<p class="lead">
+  Hanya-baca. Nilai sensitif — token, kredensial, DSN — <strong>tidak pernah
+  ditampilkan</strong>, termasuk kepada teknisi yang sedang membuka halaman ini
+  di kapal. Yang bisa dilihat adalah apakah nilainya sudah diisi atau belum.
+</p>
+
+<section class="card">
+  {% if error %}
+    <p class="err" role="alert">Tidak bisa membaca konfigurasi: {{ error }}</p>
+  {% elif not config %}
+    <p class="empty">Konfigurasi tidak tersedia.</p>
+  {% else %}
+    {% macro render(value, level) %}
+      {% if value is mapping %}
+        <dl class="kv kv--nested">
+          {% for key, inner in value.items() %}
+            <dt>{{ key }}</dt>
+            <dd>{{ render(inner, level + 1) }}</dd>
+          {% endfor %}
+        </dl>
+      {% elif value is sequence and value is not string %}
+        <span class="mono">{{ value | join(", ") if value else "—" }}</span>
+      {% elif value is none %}
+        <span class="sub">—</span>
+      {% elif value == "••••••••" %}
+        <span class="chip chip--idle" title="Nilai disembunyikan">••••••••</span>
+      {% elif value == "(belum diisi)" %}
+        <span class="chip chip--warn">◐ belum diisi</span>
+      {% else %}
+        <span class="mono">{{ value }}</span>
+      {% endif %}
+    {% endmacro %}
+    {{ render(config, 0) }}
+  {% endif %}
+</section>
+
+<section class="card">
+  <h2 class="h2">Mengubah konfigurasi</h2>
+  <p class="hint">
+    Perubahan dilakukan lewat berkas <span class="mono">/etc/fleetview/edge.yaml</span>
+    dan environment variable, lalu agent dijalankan ulang. Sengaja tidak bisa diubah
+    dari halaman ini: konfigurasi yang berubah tanpa jejak adalah penyebab paling
+    umum kapal berperilaku berbeda dari yang lain, dan paling sulit dilacak.
+  </p>
+</section>
+{% endblock %}
