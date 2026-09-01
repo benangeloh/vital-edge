@@ -37,10 +37,21 @@ sudo -u postgres createuser fleetview --pwprompt
 sudo -u postgres createdb fleetview --owner fleetview
 ```
 
-InfluxDB dipasang seperti pada [02](02-provisioning-raspberry-pi.md#4-influxdb-lokal),
-dengan retensi yang berbeda:
+InfluxDB dipasang manual di sini — berbeda dari sisi kapal, yang sejak
+`install.sh` terbaru memasang dan men-provisioning InfluxDB otomatis (lihat
+[02 §4](02-provisioning-raspberry-pi.md#4-pasang-edge-agent)). Central tidak
+memakai skrip yang sama karena retensinya berbeda dan tidak lewat proses setup
+teknisi lapangan:
 
 ```bash
+curl -s https://repos.influxdata.com/influxdata-archive.key \
+  | gpg --dearmor | sudo tee /usr/share/keyrings/influxdata.gpg >/dev/null
+echo "deb [signed-by=/usr/share/keyrings/influxdata.gpg] \
+https://repos.influxdata.com/debian stable main" \
+  | sudo tee /etc/apt/sources.list.d/influxdata.list
+sudo apt-get update && sudo apt-get install -y influxdb2
+sudo systemctl enable --now influxdb
+
 influx setup --username fleetview --org fleetview --bucket telemetry \
   --retention 365d --force
 ```

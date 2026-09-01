@@ -148,25 +148,7 @@ chrony tetap dipasang supaya timestamp masuk akal saat sumber waktu tersedia.
 Jangan pasang `fake-hwclock` bersamaan dengan chrony tanpa memahami interaksinya;
 keduanya bisa saling menimpa dan menghasilkan lompatan jam palsu berulang.
 
-## 4. InfluxDB lokal
-
-```bash
-curl -s https://repos.influxdata.com/influxdata-archive.key \
-  | gpg --dearmor | sudo tee /usr/share/keyrings/influxdata.gpg >/dev/null
-echo "deb [signed-by=/usr/share/keyrings/influxdata.gpg] \
-https://repos.influxdata.com/debian stable main" \
-  | sudo tee /etc/apt/sources.list.d/influxdata.list
-sudo apt-get update && sudo apt-get install -y influxdb2
-
-sudo systemctl enable --now influxdb
-influx setup --username fleetview --org fleetview --bucket telemetry \
-  --retention 90d --force
-```
-
-Retensi 90 hari, bukan tak terbatas. Disk penuh menghentikan akuisisi, dan itu
-kegagalan yang paling merugikan karena terjadi diam-diam.
-
-## 5. Pasang Edge Agent
+## 4. Pasang Edge Agent
 
 Repo ini berisi **dua sistem yang dideploy terpisah**, tetapi seluruhnya hanya
 3,3 MB — kode central di dalamnya cuma 508 KB dan tidak pernah dipasang. Jadi
@@ -178,11 +160,23 @@ sudo git clone --depth 1 --branch <tag rilis> <url-repo> /opt/fleetview/src
 sudo /opt/fleetview/src/edge/deploy/scripts/install.sh
 ```
 
-`install.sh` memasang prasyaratnya sendiri (`git`, `python3-venv`, `sqlite3`,
-`gnupg`) dan InfluxDB, membuat config awal, lalu menjalankan agent. Ia hanya
+Satu perintah ini mengurus semuanya: prasyarat sistem (`git`, `python3-venv`,
+`sqlite3`, `gnupg`), InfluxDB lokal (dipasang **dan** di-provisioning dengan
+retensi 90 hari, kata sandi acak, dan token yang langsung ditaruh di
+`agent.env`), venv, keempat paket edge, unit systemd, dan config awal. Ia hanya
 menyalin `edge/`, `shared/`, `docs/`, dan `pyproject.toml` ke direktori rilis —
-kode central ikut ter-clone tetapi tidak pernah dipasang, tidak pernah
-dijalankan, dan tidak masuk `PATH`.
+kode central ikut ter-clone tetapi tidak pernah dipasang.
+
+Di akhir, ia mencetak penilaian penyimpanan otomatis dan alamat halaman setup:
+
+```
+── Media penyimpanan yang terdeteksi ──────────────
+  mmcblk0    119.2G   sdcard    jangan untuk data
+             fsync tiap detik menghabiskannya dalam hitungan bulan
+
+  Buka di peramban:   http://<ip-pi>:8080/setup
+  PIN setup      :    ######
+```
 
 <details>
 <summary>Kalau ingin kode central sama sekali tidak mendarat di perangkat</summary>
@@ -201,42 +195,47 @@ berguna untuk memutakhirkan perangkat yang sudah terpasang.
 kedua sisi. Kalau dipisah menjadi dua repo, format wire bisa menyimpang tanpa ada
 yang menangkapnya sampai sebuah kapal berhenti bisa menyetor data.
 
-Skrip ini idempoten: menjalankannya ulang akan memutakhirkan berkas dan merestart
-layanan tanpa menyentuh data. Ia memasang rilis ke direktori bertanda versi lalu
-menukar symlink `current` — itulah yang membuat rollback menjadi satu perintah.
+Skrip ini idempoten: menjalankannya ulang akan memutakhirkan berkas dan
+merestart layanan tanpa menyentuh data maupun identitas yang sudah ada. Ia
+memasang rilis ke direktori bertanda versi lalu menukar symlink `current` —
+itulah yang membuat rollback menjadi satu perintah.
 
-Pada tahap ini `install.sh` akan memberi peringatan bahwa `agent.env` belum ada.
-Itu wajar: identitas kapal diberikan di langkah berikutnya.
+## 5. Penyimpanan
+
+```bash
+sudo fleetview-storage
+```
+
+Sudah tercetak otomatis di akhir langkah 4; jalankan lagi kapan saja untuk
+memeriksa. Kalau ada kandidat lebih baik dari kartu SD (NVMe, SSD, SSD-USB), ia
+menyarankan perintah `--siapkan`-nya — lihat
+[§Kenapa SSD](#kenapa-ssd-dan-kenapa-tidak-perlu-besar) di atas untuk rincian
+dan pengamannya.
+
+**Kalau perangkat data sudah dipasang sebelum langkah 4**, urutannya tidak
+masalah — `install.sh` menulis ke `${FLEETVIEW_DATA_DIR:-/var/lib/fleetview}`
+mengikuti apa pun yang ter-mount di sana saat itu.
 
 ## 6. Identitas kapal dan kredensial
 
-Di sinilah kedua potongan dari **Tahap 1** dipakai. Kalau belum punya, kembali
-ke [07 §Tahap 1](07-ship-onboarding.md#tahap-1--daftarkan-kapal-di-central) —
-Pi tidak bisa mendaftarkan dirinya sendiri.
+Diisi lewat **halaman setup di Edge Console**, bukan dengan menyunting YAML.
+Kapal harus sudah didaftarkan lebih dulu di dashboard — kalau belum, lihat
+[07 §Tahap 1](07-ship-onboarding.md#tahap-1--daftarkan-kapal-di-central); Pi
+tidak bisa mendaftarkan dirinya sendiri.
 
-```bash
-sudo cp /opt/fleetview/src/edge/agent/config/edge.example.yaml /etc/fleetview/edge.yaml
-sudo cp /opt/fleetview/src/edge/agent/config/sensors.example.yaml /etc/fleetview/sensors.yaml
-sudo nano /etc/fleetview/edge.yaml    # isi ship_id, ship_name, device_id, central_url
-```
+1. Buka `http://<ip-pi>:8080/setup` dari laptop di jaringan yang sama
+2. Isi **alamat pusat**, **client_id**, **secret** (dari dashboard), dan
+   **PIN** (dicetak `install.sh`, atau `sudo fleetview-status` kapan saja)
+3. Tekan **Sambungkan**
 
-```bash
-sudo tee /etc/fleetview/agent.env >/dev/null <<'ENV'
-FLEETVIEW_EDGE_CONFIG=/etc/fleetview/edge.yaml
-ENV
+Nama kapal, `ship_id`, dan `device_id` diambil otomatis dari central — tidak
+ada UUID yang diketik ulang. Kredensialnya diuji ke central lebih dulu; kalau
+ditolak, tidak ada yang tersimpan.
 
-sudo tee /etc/fleetview/secrets.env >/dev/null <<'ENV'
-FLEETVIEW_STORAGE__INFLUX_TOKEN=<token influx lokal>
-FLEETVIEW_SYNC__DEVICE_CLIENT_ID=<client_id dari central>
-FLEETVIEW_SYNC__DEVICE_SECRET=<secret dari central>
-ENV
-
-sudo chmod 0600 /etc/fleetview/secrets.env
-sudo chown root:fleetview /etc/fleetview/secrets.env
-```
-
-Rahasia hanya di `secrets.env`, tidak pernah di `edge.yaml`. `edge.yaml` akan
-sering dibuka, disalin, dan dilampirkan saat diagnosis.
+Agent akan berhenti sendiri lalu systemd menyalakannya ulang dengan identitas
+terisi. Console tidak punya autentikasi sendiri, jadi halaman ini dilindungi
+PIN — siapa pun di jaringan kapal yang tidak memegang perangkatnya tidak bisa
+mengarahkannya ke central lain.
 
 ## 7. Verifikasi sebelum dikirim
 
@@ -250,18 +249,21 @@ systemctl show fleetview-agent -p WatchdogUSec      # -> 60000000
 ```
 
 ```bash
-# 1. Akuisisi benar-benar maju
+# 1. Ringkasan cepat — mencakup poin 1-3 di bawah sekaligus
+sudo fleetview-status
+
+# 2. Akuisisi benar-benar maju
 sleep 30 && systemctl status fleetview-agent | grep Status
 #    -> Status: "polls=30 pending=... record"     angka polls harus bertambah
 
-# 2. Data benar-benar durable
+# 3. Data benar-benar durable
 sudo sqlite3 /var/lib/fleetview/outbox.db \
   "SELECT COALESCE(SUM(record_count),0) FROM outbox;"     # -> > 0
 
-# 3. Console bisa dibuka
+# 4. Console bisa dibuka (mengalihkan ke /setup bila belum dikonfigurasi)
 curl -sf http://127.0.0.1:8080/ >/dev/null && echo "console ok"
 
-# 4. Selamat dari mati listrik  <-- yang paling penting
+# 5. Selamat dari mati listrik  <-- yang paling penting
 sudo sqlite3 /var/lib/fleetview/outbox.db \
   "SELECT COALESCE(SUM(record_count),0) FROM outbox;"     # catat angkanya
 sudo systemctl stop fleetview-agent
@@ -270,7 +272,7 @@ sudo sqlite3 /var/lib/fleetview/outbox.db \
   "SELECT COALESCE(SUM(record_count),0) FROM outbox;"     # tidak boleh berkurang
 sudo sqlite3 /var/lib/fleetview/outbox.db "PRAGMA integrity_check;"   # -> ok
 
-# 5. Watchdog benar-benar bekerja
+# 6. Watchdog benar-benar bekerja
 sudo systemctl kill -s SIGSTOP fleetview-agent
 sleep 90
 systemctl status fleetview-agent | head -5   # harus sudah direstart systemd
