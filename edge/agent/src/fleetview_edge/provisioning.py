@@ -69,7 +69,7 @@ async def verify_credentials(
             )
     except httpx.HTTPError as exc:
         raise ConfigError(
-            f"tidak bisa menjangkau central di {base}: {exc}",
+            _jelaskan_kegagalan_koneksi(exc, base),
             code="provisioning.unreachable",
             details={"central_url": base},
         ) from exc
@@ -105,6 +105,53 @@ async def verify_credentials(
         ship_name=str(data.get("ship_name") or "").strip(),
         ship_slug=data.get("ship_slug"),
     )
+
+
+def _jelaskan_kegagalan_koneksi(exc: Exception, base: str) -> str:
+    """Terjemahkan kegagalan jaringan menjadi tindakan yang bisa diambil.
+
+    Halaman setup dipakai teknisi pemasang, bukan programmer. Pesan seperti
+    "[SSL: WRONG_VERSION_NUMBER] wrong version number (_ssl.c:1029)" benar secara
+    teknis dan sama sekali tidak berguna baginya — ia tidak memberi tahu bahwa
+    yang perlu diubah hanyalah satu huruf di alamat.
+    """
+    detail = str(exc)
+    lower = detail.lower()
+
+    # Salam TLS ke server yang bicara HTTP polos. Nyaris selalu berarti alamatnya
+    # ditulis https:// padahal server tidak memakai TLS.
+    if "wrong_version_number" in lower or "record layer failure" in lower:
+        saran = base.replace("https://", "http://", 1)
+        return (
+            "Alamat ini ditulis https:// tetapi server menjawab dengan HTTP biasa. "
+            f"Coba ganti menjadi: {saran}"
+        )
+
+    if "certificate verify failed" in lower or "self signed" in lower:
+        return (
+            "Sertifikat HTTPS server tidak tepercaya. Periksa alamatnya, atau "
+            "minta tim darat memasang sertifikat yang sah."
+        )
+
+    if isinstance(exc, httpx.ConnectTimeout | httpx.ReadTimeout):
+        return (
+            f"Server di {base} tidak menjawab dalam batas waktu. Periksa apakah "
+            "perangkat ini terhubung ke jaringan yang sama dengan server."
+        )
+
+    if "nodename nor servname" in lower or "name or service not known" in lower:
+        return (
+            f"Nama host pada {base} tidak dikenali. Periksa ejaannya, atau pakai "
+            "alamat IP bila DNS belum tersedia di jaringan kapal."
+        )
+
+    if "connection refused" in lower or isinstance(exc, httpx.ConnectError):
+        return (
+            f"Tidak ada yang menjawab di {base}. Periksa alamat dan nomor port, "
+            "dan pastikan server pusat sedang berjalan."
+        )
+
+    return f"Tidak bisa menjangkau server di {base}: {detail}"
 
 
 def _write_atomic(path: Path, content: str, *, mode: int) -> None:

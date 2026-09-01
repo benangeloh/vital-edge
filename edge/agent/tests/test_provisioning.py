@@ -214,3 +214,59 @@ class TestPin:
         pin = setup_pin(path)
         assert len(pin) == 6 and pin.isdigit()
         assert oct(path.stat().st_mode)[-3:] == "600"
+
+
+class TestPesanKegagalanKoneksi:
+    """Halaman setup dipakai teknisi pemasang, bukan programmer.
+
+    Pesan yang benar secara teknis tetapi tidak menyebutkan tindakan apa pun
+    membuat orang berhenti di tengah pemasangan — dan itu terjadi di kapal,
+    jauh dari siapa pun yang bisa menerjemahkannya.
+    """
+
+    async def _pesan(self, patched, exc: Exception, url: str = "https://192.168.1.24:8000") -> str:
+        def boom(_r: httpx.Request) -> httpx.Response:
+            raise exc
+
+        patched(boom)
+        with pytest.raises(ConfigError) as got:
+            await verify_credentials(central_url=url, client_id="x", secret="y")
+        return got.value.message
+
+    async def test_https_ke_server_http_menyarankan_perbaikannya(self, patched) -> None:
+        """Kasus nyata: teknisi menulis https:// padahal pusat melayani HTTP
+        polos. OpenSSL menjawab 'WRONG_VERSION_NUMBER' — benar, dan tidak
+        memberi tahu bahwa yang perlu diubah hanya satu huruf."""
+        pesan = await self._pesan(
+            patched,
+            httpx.ConnectError("[SSL: WRONG_VERSION_NUMBER] wrong version number (_ssl.c:1029)"),
+        )
+        assert "http://192.168.1.24:8000" in pesan
+        assert "WRONG_VERSION_NUMBER" not in pesan
+
+    async def test_sertifikat_tidak_tepercaya_dijelaskan(self, patched) -> None:
+        pesan = await self._pesan(
+            patched, httpx.ConnectError("certificate verify failed: self signed certificate")
+        )
+        assert "sertifikat" in pesan.lower()
+
+    async def test_koneksi_ditolak_menyebut_alamat_dan_port(self, patched) -> None:
+        pesan = await self._pesan(
+            patched, httpx.ConnectError("Connection refused"), url="http://192.168.1.24:8000"
+        )
+        assert "192.168.1.24:8000" in pesan
+        assert "port" in pesan.lower()
+
+    async def test_nama_host_salah_menyarankan_pakai_ip(self, patched) -> None:
+        pesan = await self._pesan(
+            patched,
+            httpx.ConnectError("nodename nor servname provided"),
+            url="http://pusat-salah-ketik:8000",
+        )
+        assert "IP" in pesan
+
+    async def test_timeout_dibedakan_dari_alamat_salah(self, patched) -> None:
+        """Dua keadaan dengan tindakan berlawanan: yang satu periksa jaringan,
+        yang satu perbaiki alamat."""
+        pesan = await self._pesan(patched, httpx.ConnectTimeout("timed out"))
+        assert "jaringan" in pesan.lower()

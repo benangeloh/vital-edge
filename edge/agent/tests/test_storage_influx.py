@@ -129,10 +129,10 @@ class TestPemetaanKegagalan:
         assert exc.value.retryable is True
         assert exc.value.details["retry_after"] == "30"
 
-    @pytest.mark.parametrize("status", [400, 401, 403, 404, 413, 422])
-    async def test_4xx_tidak_diulang(self, status: int) -> None:
-        """Payload salah bentuk, token ditolak, bucket tidak ada — mengulang
-        tidak akan menolong, dan buffer akan tersumbat kalau kita coba."""
+    @pytest.mark.parametrize("status", [400, 413, 422])
+    async def test_payload_buruk_tidak_diulang(self, status: int) -> None:
+        """Payload salah bentuk tidak akan pernah diterima berapa kali pun
+        dicoba, dan satu batch rusak akan menyumbat buffer kalau kita coba."""
         store = _store(lambda _r: httpx.Response(status, text="nope"))
         with pytest.raises(StorageRejectedError) as exc:
             await store.write(_records())
@@ -266,3 +266,37 @@ class TestEnsureReady:
             raise httpx.ConnectError("mati")
 
         await _store(handler).ensure_ready()  # tidak boleh melempar
+
+
+class TestKegagalanKonfigurasi:
+    """Token salah adalah salah konfigurasi, bukan data yang buruk.
+
+    Ditemukan di Raspberry Pi sungguhan: token InfluxDB belum terpasang, dan
+    agent membuang 1.368 pembacaan secara permanen sebelum ada yang memeriksa
+    log. Begitu token diperbaiki, percobaan ulang berhasil — jadi membuangnya
+    adalah kehilangan yang sama sekali tidak perlu.
+    """
+
+    @pytest.mark.parametrize("status", [401, 403, 404])
+    async def test_kesalahan_konfigurasi_bisa_dicoba_ulang(self, status: int) -> None:
+        store = _store(lambda _r: httpx.Response(status, text="unauthorized access"))
+        with pytest.raises(StorageUnavailableError) as exc:
+            await store.write(_records())
+        assert exc.value.retryable is True
+
+    async def test_token_diperbaiki_lalu_penulisan_berhasil(self) -> None:
+        """Inti perbaikan ini: kegagalan konfigurasi bersifat sementara bila
+        dilihat dari sudut pandang datanya."""
+        keadaan = {"token_benar": False}
+
+        def handler(_r: httpx.Request) -> httpx.Response:
+            if not keadaan["token_benar"]:
+                return httpx.Response(401, text="unauthorized access")
+            return httpx.Response(204)
+
+        store = _store(handler)
+        with pytest.raises(StorageUnavailableError):
+            await store.write(_records())
+
+        keadaan["token_benar"] = True  # operator memperbaiki token
+        await store.write(_records())  # tidak melempar lagi

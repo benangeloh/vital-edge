@@ -374,3 +374,130 @@ class TestHalamanSetup:
     ) -> None:
         client = make_client(make_context(configured=True))
         assert client.get("/", follow_redirects=False).status_code == 200
+
+
+class TestKelolaSensor:
+    """Teknisi mendaftarkan sensor dari dashboard, bukan dengan menyunting YAML.
+
+    Ini yang membuat perangkat bisa dipasang tanpa akses terminal — dan yang
+    membuat pemetaan ke LP-A104 bisa disiapkan sebelum protokolnya dipastikan.
+    """
+
+    def test_daftar_sensor_dan_formulir_muncul(self, make_context: Callable[..., Any]) -> None:
+        html = make_client(make_context()).get("/sensors").text
+        assert "Daftar sensor terpasang" in html
+        assert "Tambah sensor" in html
+        assert "me_port_rpm" in html
+
+    def test_menyimpan_sensor_baru(self, make_context: Callable[..., Any]) -> None:
+        context = make_context()
+        client = make_client(context)
+        r = client.post(
+            "/sensors/simpan",
+            data={
+                "sensor_id": "fuel_level_main",
+                "channel": "UW120",
+                "metric": "level",
+                "unit": "percent",
+                "scale": "0.1",
+                "offset": "0",
+                "poll_interval_seconds": "1",
+                "min_value": "0",
+                "max_value": "100",
+                "field_name": "value",
+                "enabled": "on",
+            },
+            follow_redirects=False,
+        )
+        assert r.status_code == 303
+        tersimpan = next(e for e in context._registry if e["sensor_id"] == "fuel_level_main")
+        assert tersimpan["scale"] == 0.1
+        assert tersimpan["validation"] == {"min_value": 0.0, "max_value": 100.0}
+
+    def test_koma_desimal_diterima(self, make_context: Callable[..., Any]) -> None:
+        """Papan ketik Indonesia lazim memakai koma. Menolaknya membuat teknisi
+        buntu pada kolom yang tampak sepele."""
+        context = make_context()
+        client = make_client(context)
+        client.post(
+            "/sensors/simpan",
+            data={
+                "sensor_id": "suhu",
+                "channel": "UW130",
+                "metric": "temperature",
+                "scale": "0,1",
+                "offset": "0",
+                "poll_interval_seconds": "1",
+                "field_name": "value",
+                "enabled": "on",
+            },
+            follow_redirects=False,
+        )
+        disimpan = next(e for e in context._registry if e["sensor_id"] == "suhu")
+        assert disimpan["scale"] == 0.1
+
+    def test_angka_tidak_valid_ditolak_dengan_pesan(self, make_context: Callable[..., Any]) -> None:
+        client = make_client(make_context())
+        r = client.post(
+            "/sensors/simpan",
+            data={
+                "sensor_id": "suhu",
+                "channel": "UW130",
+                "metric": "temperature",
+                "scale": "dua koma lima",
+                "offset": "0",
+                "poll_interval_seconds": "1",
+                "field_name": "value",
+                "enabled": "on",
+            },
+            follow_redirects=False,
+        )
+        assert r.status_code == 303
+        assert "error" in r.headers["location"]
+
+    def test_alamat_salah_ditolak_tanpa_menjatuhkan_halaman(
+        self, make_context: Callable[..., Any]
+    ) -> None:
+        """Teknisi mungkin membawa kebiasaan alamat Modbus (40001)."""
+        client = make_client(make_context())
+        r = client.post(
+            "/sensors/simpan",
+            data={
+                "sensor_id": "suhu",
+                "channel": "40001",
+                "metric": "temperature",
+                "scale": "1",
+                "offset": "0",
+                "poll_interval_seconds": "1",
+                "field_name": "value",
+                "enabled": "on",
+            },
+            follow_redirects=False,
+        )
+        assert r.status_code == 303
+        assert "error" in r.headers["location"]
+
+    def test_menghapus_sensor(self, make_context: Callable[..., Any]) -> None:
+        context = make_context()
+        client = make_client(context)
+        r = client.post("/sensors/hapus", data={"sensor_id": "me_port_rpm"}, follow_redirects=False)
+        assert r.status_code == 303
+        assert context._registry == []
+
+    def test_peringatan_lp_a104_ditampilkan(self, make_context: Callable[..., Any]) -> None:
+        """Jalur baca belum terkonfirmasi. Teknisi harus tahu bahwa mendaftarkan
+        sensor belum berarti datanya akan mengalir."""
+        html = make_client(make_context(adapter="lp_a104")).get("/sensors").text
+        assert "belum terkonfirmasi" in html
+
+    def test_adapter_lain_tidak_menampilkan_aturan_alamat_lp_a104(
+        self, make_context: Callable[..., Any]
+    ) -> None:
+        html = make_client(make_context(adapter="simulator")).get("/sensors").text
+        assert "UW0–UW128999" not in html
+
+    def test_registry_rusak_tidak_menjatuhkan_halaman(
+        self, make_context: Callable[..., Any]
+    ) -> None:
+        html = make_client(make_context(fail={"sensor_registry"})).get("/sensors").text
+        assert "Tidak bisa membaca daftar sensor" in html

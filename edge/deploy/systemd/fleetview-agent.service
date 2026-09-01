@@ -63,6 +63,14 @@ ProtectKernelModules=yes
 ProtectControlGroups=yes
 RestrictSUIDSGID=yes
 ReadWritePaths=/var/lib/fleetview
+# Halaman setup di Edge Console menulis identitas kapal dan kredensialnya ke
+# sini. Tanpa baris ini, ProtectSystem=strict membuat /etc read-only di tingkat
+# namespace — izin direktorinya boleh saja sudah benar, penulisan tetap ditolak
+# dengan "Read-only file system", dan pesannya tidak menyebut systemd sama sekali.
+#
+# Cakupannya tetap sempit: hanya direktori config FleetView. Sisa /etc, /usr,
+# dan /boot tetap read-only bagi proses ini.
+ReadWritePaths=/etc/fleetview
 # Port serial ke LP-A104. Sesuaikan bila perangkat terpasang di jalur lain.
 DeviceAllow=/dev/ttyUSB0 rw
 SupplementaryGroups=dialout

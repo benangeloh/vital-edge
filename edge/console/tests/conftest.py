@@ -40,6 +40,7 @@ class FakeContext:
         empty: bool = False,
         configured: bool = True,
         pin: str = "123456",
+        adapter: str = "lp_a104",
     ) -> None:
         self.fail = fail or set()
         self.empty = empty
@@ -47,7 +48,40 @@ class FakeContext:
         self.exports: list[str] = []
         self._configured = configured
         self._pin = pin
+        self._adapter = adapter
+        self._registry: list[dict[str, Any]] = [
+            {"sensor_id": "me_port_rpm", "channel": "UW100", "metric": "rpm", "unit": "rpm"}
+        ]
         self.provisioned: list[dict[str, Any]] = []
+
+    # -- registry sensor ----------------------------------------------------
+
+    def sensor_registry(self) -> dict[str, Any]:
+        self._guard("sensor_registry")
+        return {
+            "adapter": self._adapter,
+            "editable": True,
+            "path": "/etc/fleetview/sensors.yaml",
+            "sensors": list(self._registry),
+        }
+
+    def save_sensor(self, entry: dict[str, Any]) -> str:
+        self._guard("save_sensor")
+        if not str(entry.get("channel", "")).upper().startswith(("UW", "UB")):
+            from fleetview_common import ValidationError
+
+            raise ValidationError("alamat tidak dikenali", code="sensor.channel_invalid")
+        self._registry = [e for e in self._registry if e["sensor_id"] != entry["sensor_id"]] + [
+            entry
+        ]
+        return str(entry["sensor_id"])
+
+    def remove_sensor(self, sensor_id: str) -> bool:
+        self._guard("remove_sensor")
+        sisa = [e for e in self._registry if e["sensor_id"] != sensor_id]
+        berubah = len(sisa) != len(self._registry)
+        self._registry = sisa
+        return berubah
 
     # -- provisioning -------------------------------------------------------
 

@@ -24,6 +24,7 @@ from fleetview_console import (
     redact_config,
 )
 from fleetview_edge.collector import Collector
+from fleetview_edge.config.sensor_editor import delete_sensor, read_sensors, upsert_sensor
 from fleetview_edge.provisioning import provision, setup_pin
 from fleetview_edge.settings import EdgeSettings
 from fleetview_edge.storage import StorageWriter
@@ -62,6 +63,39 @@ class AgentConsoleContext:
         self._metrics = SystemMetrics(data_dir=settings.storage.data_dir)
         self._config_path = config_path
         self._on_provisioned = on_provisioned
+
+    # -- registry sensor ----------------------------------------------------
+
+    def sensor_registry(self) -> dict[str, Any]:
+        """Isi registry apa adanya, untuk disunting di Console.
+
+        Berbeda dari `sensors()`, yang menampilkan pembacaan terakhir. Yang ini
+        menampilkan definisinya — termasuk sensor yang belum pernah terbaca
+        sekali pun, karena justru itu yang perlu diperbaiki.
+        """
+        path = self._settings.collector.sensors_path
+        return {
+            "adapter": self._settings.collector.adapter,
+            "editable": path is not None,
+            "path": str(path) if path else None,
+            "sensors": read_sensors(path) if path else [],
+        }
+
+    def save_sensor(self, entry: dict[str, Any]) -> str:
+        path = self._settings.collector.sensors_path
+        if path is None:
+            raise ConfigError(
+                "lokasi registry sensor tidak diketahui", code="sensor.no_registry_path"
+            )
+        return upsert_sensor(path, entry, adapter=self._settings.collector.adapter)
+
+    def remove_sensor(self, sensor_id: str) -> bool:
+        path = self._settings.collector.sensors_path
+        if path is None:
+            raise ConfigError(
+                "lokasi registry sensor tidak diketahui", code="sensor.no_registry_path"
+            )
+        return delete_sensor(path, sensor_id)
 
     # -- provisioning -------------------------------------------------------
 

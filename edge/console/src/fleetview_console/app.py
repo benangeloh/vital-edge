@@ -25,7 +25,7 @@ from __future__ import annotations
 import secrets
 from pathlib import Path
 from typing import Any
-from urllib.parse import urlencode
+from urllib.parse import quote, urlencode
 
 from fastapi import FastAPI, Form, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
@@ -211,7 +211,98 @@ def create_console_app(
     @app.get("/sensors", response_class=HTMLResponse)
     async def sensors(request: Request) -> HTMLResponse:
         data, error = await _safe(context.sensors())
-        return page(request, "sensors.html", "/sensors", sensors=data or [], error=error)
+        registry, registry_error = None, None
+        getter = getattr(context, "sensor_registry", None)
+        if callable(getter):
+            try:
+                registry = getter()
+            except Exception as exc:
+                registry_error = str(exc)
+        return page(
+            request,
+            "sensors.html",
+            "/sensors",
+            sensors=data or [],
+            error=error,
+            registry=registry,
+            registry_error=registry_error,
+            edit=request.query_params.get("edit"),
+        )
+
+    @app.post("/sensors/simpan")
+    async def simpan_sensor(
+        sensor_id: str = Form(...),
+        channel: str = Form(...),
+        metric: str = Form(...),
+        unit: str = Form(""),
+        field_name: str = Form("value"),
+        scale: str = Form("1"),
+        offset: str = Form("0"),
+        poll_interval_seconds: str = Form("1"),
+        min_value: str = Form(""),
+        max_value: str = Form(""),
+        enabled: str = Form("on"),
+    ) -> RedirectResponse:
+        """Tambah atau ubah satu sensor.
+
+        Angka diterima sebagai string lalu diurai di sini: input HTML kosong
+        mengirimkan "" dan bukan None, dan memaksakan tipe di lapisan FastAPI
+        akan menolak formulir dengan pesan yang tidak bisa dibaca teknisi.
+        """
+        entry: dict[str, Any] = {
+            "sensor_id": sensor_id.strip(),
+            "channel": channel.strip(),
+            "metric": metric.strip(),
+            "unit": unit.strip() or None,
+            "field_name": field_name.strip() or "value",
+            "enabled": enabled == "on",
+        }
+        for nama, mentah in (
+            ("scale", scale),
+            ("offset", offset),
+            ("poll_interval_seconds", poll_interval_seconds),
+        ):
+            teks = mentah.strip().replace(",", ".")
+            if teks:
+                try:
+                    entry[nama] = float(teks)
+                except ValueError:
+                    return _sensor_error(f"{nama} harus berupa angka, dapat {mentah!r}")
+
+        batas: dict[str, float] = {}
+        for nama, mentah in (("min_value", min_value), ("max_value", max_value)):
+            teks = mentah.strip().replace(",", ".")
+            if teks:
+                try:
+                    batas[nama] = float(teks)
+                except ValueError:
+                    return _sensor_error(f"{nama} harus berupa angka, dapat {mentah!r}")
+        if batas:
+            entry["validation"] = batas
+
+        try:
+            context.save_sensor(entry)
+        except FleetViewError as exc:
+            return _sensor_error(exc.message)
+        except Exception as exc:
+            log.exception("console.sensor_gagal_disimpan")
+            return _sensor_error(str(exc))
+        return RedirectResponse("/sensors?disimpan=1", status_code=303)
+
+    @app.post("/sensors/hapus")
+    async def hapus_sensor(sensor_id: str = Form(...)) -> RedirectResponse:
+        try:
+            context.remove_sensor(sensor_id.strip())
+        except FleetViewError as exc:
+            return _sensor_error(exc.message)
+        except Exception as exc:
+            log.exception("console.sensor_gagal_dihapus")
+            return _sensor_error(str(exc))
+        return RedirectResponse("/sensors?dihapus=1", status_code=303)
+
+    def _sensor_error(pesan: str) -> RedirectResponse:
+        log.warning("console.sensor_ditolak", error=pesan)
+        return RedirectResponse(f"/sensors?error={quote(pesan)}", status_code=303)
 
     @app.get("/partials/sensors", response_class=HTMLResponse)
     async def sensors_partial(request: Request) -> HTMLResponse:

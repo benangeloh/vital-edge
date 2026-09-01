@@ -18,6 +18,8 @@ sama dengan protokol sync: 4xx berarti jangan diulang, 5xx dan 429 berarti boleh
 
 from __future__ import annotations
 
+from typing import Final
+
 import httpx
 
 from fleetview_common import get_logger, now_micros
@@ -35,6 +37,27 @@ from fleetview_edge.storage.retention import RetentionPolicy
 __all__ = ["InfluxTelemetryStore"]
 
 log = get_logger(__name__)
+
+
+#: Kegagalan yang sebabnya KONFIGURASI, bukan data: token salah atau dicabut
+#: (401/403), dan bucket atau organisasi yang tidak ada (404).
+#:
+#: Diperlakukan retryable, dan pembedaannya penting. Mengulang memang tidak
+#: menolong selama konfigurasinya masih salah — tetapi begitu operator
+#: memperbaiki token, percobaan berikutnya berhasil. Menandainya permanen berarti
+#: setiap pembacaan dibuang diam-diam sampai ada yang kebetulan memeriksa log,
+#: dan riwayat lokal yang telanjur hilang tidak bisa dikembalikan.
+#:
+#: Kerugian sebaliknya jauh lebih ringan: buffer percobaan ulang berbatas, jadi
+#: yang terburuk adalah kehilangan TERBATAS dan dilaporkan ("record HILANG karena
+#: buffer penuh"), bukan pembuangan tanpa batas yang senyap. Sinkronisasi tidak
+#: terpengaruh sama sekali — outbox adalah write barrier-nya, dan ia sudah
+#: menyimpan datanya sebelum InfluxDB pernah dicoba.
+#:
+#: Alasan yang sama sudah dipakai di sisi central sejak Phase 5; sisi edge luput
+#: sampai sebuah Raspberry Pi sungguhan membuang 1.368 pembacaan karena tokennya
+#: belum terpasang.
+_KONFIGURASI_SALAH: Final = frozenset({401, 403, 404})
 
 
 class InfluxTelemetryStore(TelemetryStore):
@@ -133,11 +156,11 @@ class InfluxTelemetryStore(TelemetryStore):
             "records": record_count,
         }
 
-        # 4xx (kecuali 429) berarti datanya sendiri yang bermasalah — payload
-        # salah bentuk, token ditolak, bucket tidak ada. Mengulang tidak akan
-        # menolong, dan kalau kita tetap mengulang, satu batch rusak akan
-        # menyumbat buffer sementara data baru terbuang di belakangnya.
-        if response.status_code == 429 or response.status_code >= 500:
+        if (
+            response.status_code == 429
+            or response.status_code >= 500
+            or response.status_code in _KONFIGURASI_SALAH
+        ):
             retry_after = response.headers.get("Retry-After")
             raise StorageUnavailableError(
                 f"InfluxDB menolak sementara (HTTP {response.status_code})",
