@@ -94,6 +94,15 @@ class FleetService:
         await self._db.flush()
         return ship
 
+    async def ship_by_slug(self, slug: str) -> Ship | None:
+        """Slug adalah nama direktori paket export USB dan pengenal yang dipakai
+        manusia. Bentrokan harus ditolak sebelum apa pun dibuat, bukan dibiarkan
+        muncul sebagai IntegrityError di tengah transaksi."""
+        return (await self._db.execute(select(Ship).where(Ship.slug == slug))).scalar_one_or_none()
+
+    async def device_by_id(self, device_id: UUID) -> Device | None:
+        return await self._db.get(Device, device_id)
+
     async def create_device(
         self,
         *,

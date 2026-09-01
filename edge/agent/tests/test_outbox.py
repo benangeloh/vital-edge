@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import sqlite3
 from pathlib import Path
+from typing import Any
 from uuid import UUID
 
 import pytest
@@ -11,6 +13,7 @@ from fleetview_contracts import SyncPriority, TelemetryRecord
 from fleetview_edge.outbox import (
     BatchRow,
     BatchState,
+    OutboxChunk,
     OutboxSink,
     OutboxStore,
     SqliteSequenceSource,
@@ -34,6 +37,11 @@ def _records(n: int, start: int = 1, ts_base: int = 1_756_612_800_000_000) -> li
         )
         for i in range(start, start + n)
     ]
+
+
+def _seqs(chunks: list[OutboxChunk]) -> list[int]:
+    """Ratakan chunk menjadi daftar nomor sequence."""
+    return [r.sequence_number for c in chunks for r in c.records]
 
 
 @pytest.fixture
@@ -91,10 +99,25 @@ class TestPenyimpanan:
 
 
 class TestRunBerurutan:
-    def test_mengambil_baris_berurutan(self, store: OutboxStore) -> None:
+    def test_menyambung_chunk_yang_berurutan(self, store: OutboxStore) -> None:
+        store.append(_records(3, start=1))
+        store.append(_records(3, start=4))
+        run = store.claim_contiguous_run(limit=100)
+        assert len(run) == 2
+        assert _seqs(run) == [1, 2, 3, 4, 5, 6]
+
+    def test_limit_dihormati_pada_batas_chunk(self, store: OutboxStore) -> None:
+        store.append(_records(3, start=1))
+        store.append(_records(3, start=4))
+        run = store.claim_contiguous_run(limit=5)
+        assert _seqs(run) == [1, 2, 3], "chunk kedua akan melewati limit"
+
+    def test_chunk_pertama_utuh_meski_melebihi_limit(self, store: OutboxStore) -> None:
+        """Memotong chunk akan menandai seluruhnya terkirim padahal sebagiannya
+        tidak. Lebih baik sedikit melebihi limit daripada kehilangan data."""
         store.append(_records(10))
         run = store.claim_contiguous_run(limit=5)
-        assert [r.sequence for r in run] == [1, 2, 3, 4, 5]
+        assert _seqs(run) == list(range(1, 11))
 
     def test_celah_menjadi_batas_batch(self, store: OutboxStore) -> None:
         """Celah bisa muncul kalau proses mati antara alokasi sequence dan
@@ -103,7 +126,7 @@ class TestRunBerurutan:
         store.append(_records(3, start=1))
         store.append(_records(3, start=10))  # celah 4..9
         run = store.claim_contiguous_run(limit=100)
-        assert [r.sequence for r in run] == [1, 2, 3]
+        assert _seqs(run) == [1, 2, 3]
 
     def test_prioritas_tidak_dicampur_dalam_satu_batch(self, store: OutboxStore) -> None:
         """Semua baris dalam satu batch berbagi prioritas, supaya pengiriman
@@ -111,8 +134,8 @@ class TestRunBerurutan:
         store.append(_records(2, start=1), priority=SyncPriority.CRITICAL)
         store.append(_records(2, start=3), priority=SyncPriority.RAW)
         run = store.claim_contiguous_run(limit=100)
-        assert [r.sequence for r in run] == [1, 2]
-        assert all(r.priority is SyncPriority.CRITICAL for r in run)
+        assert _seqs(run) == [1, 2]
+        assert all(c.priority is SyncPriority.CRITICAL for c in run)
 
     def test_prioritas_kritis_lebih_dulu(self, store: OutboxStore) -> None:
         store.append(_records(2, start=1), priority=SyncPriority.RAW)
@@ -127,7 +150,9 @@ class TestRunBerurutan:
 
 
 class TestSiklusBatch:
-    def _make_batch(self, store: OutboxStore, seqs: list[int]) -> str:
+    def _make_batch(
+        self, store: OutboxStore, seqs: list[int], starts: list[int] | None = None
+    ) -> str:
         batch_id = "018f2c00-0000-7000-8000-000000000001"
         store.create_batch(
             BatchRow(
@@ -142,7 +167,7 @@ class TestSiklusBatch:
                 priority=SyncPriority.RAW,
                 state=BatchState.BUILT,
             ),
-            seqs,
+            starts if starts is not None else [seqs[0]],
         )
         return batch_id
 
@@ -296,3 +321,141 @@ class TestWriteBarrier:
 
         await OutboxSink(store, downstream=downstream)(_records(3))
         assert len(seen) == 3
+
+
+class TestKompresiChunk:
+    """Payload disimpan ter-gzip per chunk. Diukur di Phase 9: JSON polos butuh
+    79 GB untuk 30 hari offline — lebih dari separuh SSD yang dianjurkan."""
+
+    def test_satu_append_menjadi_satu_baris(self, store: OutboxStore) -> None:
+        store.append(_records(100))
+        assert store.pending_count() == 100, "pending dihitung per record"
+        assert len(store.claim_contiguous_run(limit=1000)) == 1, "disimpan sebagai satu chunk"
+
+    def test_payload_tersimpan_terkompresi(self, tmp_path: Path) -> None:
+        db = tmp_path / "outbox.db"
+        store = OutboxStore(db, synchronous_full=False)
+        store.append(_records(10))
+        store.close()
+
+        conn = sqlite3.connect(db)
+        raw = conn.execute("SELECT payload FROM outbox").fetchone()[0]
+        conn.close()
+        assert isinstance(raw, bytes)
+        assert raw[:2] == b"\x1f\x8b"  # magic number gzip
+
+    def test_record_terbaca_kembali_utuh(self, store: OutboxStore) -> None:
+        original = _records(5)
+        store.append(original)
+        run = store.claim_contiguous_run(limit=100)
+        assert [r.model_dump() for r in run[0].records] == [r.model_dump() for r in original]
+
+    def test_celah_di_dalam_satu_append_memecah_chunk(self, store: OutboxStore) -> None:
+        """Chunk menjanjikan record_count == rentang sequence. Celah di dalamnya
+        akan mematahkan janji itu dan membuat envelope batch tidak valid."""
+        store.append(_records(2, start=1) + _records(2, start=10))
+        run = store.claim_contiguous_run(limit=100)
+        assert len(run) == 1, "celah mengakhiri run"
+        chunk = run[0]
+        assert chunk.record_count == chunk.sequence_end - chunk.sequence_start + 1
+
+    def test_kompresi_memenuhi_target_kapasitas(self, tmp_path: Path) -> None:
+        """Menegakkan manfaat yang menjadi alasan chunk ini ada. Ambang 40
+        byte/titik memberi jarak longgar dari 14 byte yang terukur, sekaligus
+        tetap jauh di bawah 352 byte skema lama."""
+        db = tmp_path / "outbox.db"
+        store = OutboxStore(db, synchronous_full=False)
+        for i in range(10):
+            store.append(_records(100, start=1 + i * 100))
+        store.close()
+
+        conn = sqlite3.connect(db)
+        stored = sum(len(r[0]) for r in conn.execute("SELECT payload FROM outbox"))
+        conn.close()
+        per_point = stored / 1000
+        assert per_point < 40, f"{per_point:.1f} byte/titik, target < 40"
+
+
+class TestMigrasiV1:
+    """Agent yang di-upgrade di kapal harus membawa serta outbox yang sudah ada.
+    Membuang data lokal karena formatnya berubah adalah persis kegagalan yang
+    ingin dicegah sistem ini."""
+
+    def _buat_db_v1(self, db: Path, rows: list[tuple[Any, ...]]) -> None:
+        conn = sqlite3.connect(db)
+        conn.executescript("""
+            CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+            CREATE TABLE counters (name TEXT PRIMARY KEY, value INTEGER NOT NULL);
+            CREATE TABLE batches (
+                batch_id TEXT PRIMARY KEY, sequence_start INTEGER NOT NULL,
+                sequence_end INTEGER NOT NULL, first_timestamp INTEGER NOT NULL,
+                last_timestamp INTEGER NOT NULL, record_count INTEGER NOT NULL,
+                payload_checksum TEXT NOT NULL, schema_version TEXT NOT NULL,
+                priority INTEGER NOT NULL, state TEXT NOT NULL,
+                attempts INTEGER NOT NULL DEFAULT 0, transport TEXT,
+                next_attempt_at INTEGER, acked_at INTEGER, last_error TEXT);
+            CREATE TABLE outbox (
+                sequence INTEGER PRIMARY KEY, captured_at INTEGER NOT NULL,
+                priority INTEGER NOT NULL, payload TEXT NOT NULL,
+                state TEXT NOT NULL, batch_id TEXT);
+            CREATE INDEX ix_outbox_pending ON outbox(state, priority, sequence);
+        """)
+        with conn:
+            conn.executemany(
+                "INSERT INTO outbox(sequence, captured_at, priority, payload, state, batch_id) "
+                "VALUES(?,?,?,?,?,?)",
+                rows,
+            )
+        conn.close()
+
+    def test_record_v1_terbawa_utuh(self, tmp_path: Path) -> None:
+        db = tmp_path / "outbox.db"
+        records = _records(5)
+        self._buat_db_v1(
+            db,
+            [
+                (r.sequence_number, r.timestamp, 2, r.model_dump_json(), "pending", None)
+                for r in records
+            ],
+        )
+
+        store = OutboxStore(db, synchronous_full=False)
+        assert store.pending_count() == 5
+        run = store.claim_contiguous_run(limit=100)
+        store.close()
+        assert _seqs(run) == [1, 2, 3, 4, 5]
+        assert run[0].records[0].sensor_id == records[0].sensor_id
+
+    def test_state_berbeda_tidak_dicampur_dalam_satu_chunk(self, tmp_path: Path) -> None:
+        """State melekat pada chunk setelah migrasi. Mencampur acked dan pending
+        akan menghilangkan atau mengirim ulang salah satunya."""
+        db = tmp_path / "outbox.db"
+        records = _records(4)
+        states = ["acked", "acked", "pending", "pending"]
+        self._buat_db_v1(
+            db,
+            [
+                (r.sequence_number, r.timestamp, 2, r.model_dump_json(), s, None)
+                for r, s in zip(records, states, strict=True)
+            ],
+        )
+
+        store = OutboxStore(db, synchronous_full=False)
+        assert store.pending_count() == 2
+        run = store.claim_contiguous_run(limit=100)
+        store.close()
+        assert _seqs(run) == [3, 4]
+
+    def test_migrasi_idempoten(self, tmp_path: Path) -> None:
+        db = tmp_path / "outbox.db"
+        self._buat_db_v1(
+            db,
+            [
+                (r.sequence_number, r.timestamp, 2, r.model_dump_json(), "pending", None)
+                for r in _records(3)
+            ],
+        )
+        for _ in range(3):
+            store = OutboxStore(db, synchronous_full=False)
+            assert store.pending_count() == 3
+            store.close()

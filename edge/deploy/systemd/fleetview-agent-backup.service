@@ -1,0 +1,19 @@
+# Cadangan outbox dan konfigurasi kapal ke penyimpanan lokal.
+#
+# Yang dicadangkan bukan telemetry-nya: telemetry sudah punya dua salinan (di
+# central setelah ACK, dan di InfluxDB lokal). Yang tidak tergantikan adalah
+# outbox yang BELUM ter-ACK dan identitas kapal — kehilangan itu berarti
+# kehilangan data yang belum pernah sampai ke mana pun.
+
+[Unit]
+Description=Cadangan outbox dan konfigurasi FleetView
+After=fleetview-agent.service
+
+[Service]
+Type=oneshot
+User=fleetview
+Group=fleetview
+ExecStart=/opt/fleetview/deploy/scripts/backup-edge.sh
+# Nice: pencadangan tidak boleh bersaing dengan akuisisi.
+Nice=10
+IOSchedulingClass=idle

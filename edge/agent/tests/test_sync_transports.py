@@ -316,3 +316,106 @@ class TestFileExport:
     async def test_jenis_transport_usb(self, tmp_path: Path) -> None:
         t = FileExportTransport(target_dir=tmp_path, ship_slug="SHIP-023")
         assert t.kind is TransportKind.USB
+
+
+class TestPenukaranKredensial:
+    """Agent menukar kredensial jangka panjang menjadi token, dan menukar ulang
+    saat token kedaluwarsa.
+
+    Tanpa ini kapal hanya bisa menyetor data selama masa berlaku token — default
+    satu jam — lalu berhenti sampai ada orang yang mengganti konfigurasinya.
+    """
+
+    def _handler(self, sequence: list[httpx.Response], seen: list[httpx.Request]):
+        def handler(r: httpx.Request) -> httpx.Response:
+            seen.append(r)
+            if r.url.path == "/api/v1/auth/device/token":
+                return httpx.Response(200, json={"data": {"access_token": "token-baru"}})
+            return sequence.pop(0) if sequence else httpx.Response(200, json=_ack_body())
+
+        return handler
+
+    async def test_menukar_kredensial_sebelum_permintaan_pertama(self) -> None:
+        seen: list[httpx.Request] = []
+        transport = _transport(self._handler([], seen), client_id="ship-023", secret="rahasia")
+        await transport.send(_envelope(), b"x" * 100)
+
+        assert seen[0].url.path == "/api/v1/auth/device/token"
+        assert seen[1].headers["Authorization"] == "Bearer token-baru"
+
+    async def test_token_kedaluwarsa_ditukar_lalu_permintaan_diulang(self) -> None:
+        seen: list[httpx.Request] = []
+        transport = _transport(
+            self._handler([httpx.Response(401, json={"error": "kedaluwarsa"})], seen),
+            token="token-lama",
+            client_id="ship-023",
+            secret="rahasia",
+        )
+        result = await transport.send(_envelope(), b"x" * 100)
+
+        assert result.ack is not None, "batch harus berhasil setelah token diperbarui"
+        paths = [r.url.path for r in seen]
+        assert paths == [
+            "/api/v1/ingest/batches",  # dengan token lama -> 401
+            "/api/v1/auth/device/token",  # tukar
+            "/api/v1/ingest/batches",  # diulang dengan token baru
+        ]
+
+    async def test_401_terus_menerus_tidak_menukar_berulang(self) -> None:
+        """Kalau permintaan kedua tetap 401 dengan token yang baru diterbitkan,
+        masalahnya bukan kedaluwarsa. Mengulang terus hanya menabrak rate limit
+        auth di central."""
+        seen: list[httpx.Request] = []
+
+        def handler(r: httpx.Request) -> httpx.Response:
+            seen.append(r)
+            if r.url.path == "/api/v1/auth/device/token":
+                return httpx.Response(200, json={"data": {"access_token": "token-baru"}})
+            return httpx.Response(401, json={"error": "tetap ditolak"})
+
+        transport = _transport(handler, token="lama", client_id="ship-023", secret="rahasia")
+        with pytest.raises(TransportRejectedError):
+            await transport.send(_envelope(), b"x" * 100)
+
+        tukar = [r for r in seen if r.url.path == "/api/v1/auth/device/token"]
+        assert len(tukar) == 1, "penukaran hanya boleh sekali per permintaan"
+
+    async def test_kredensial_dicabut_ditolak_bukan_dicoba_ulang(self) -> None:
+        """Kredensial yang dicabut TIDAK bisa diperbaiki dengan mencoba ulang.
+        Menandainya retryable akan membuat kapal membombardir endpoint auth
+        selamanya."""
+
+        def handler(r: httpx.Request) -> httpx.Response:
+            if r.url.path == "/api/v1/auth/device/token":
+                return httpx.Response(401, json={"error": "dicabut"})
+            return httpx.Response(200, json=_ack_body())
+
+        transport = _transport(handler, client_id="ship-023", secret="sudah-dicabut")
+        with pytest.raises(TransportRejectedError, match="dicabut atau salah disalin"):
+            await transport.send(_envelope(), b"x" * 100)
+
+    async def test_central_mati_saat_menukar_bukan_alasan_karantina(self) -> None:
+        """Central yang sedang mati tidak boleh membuat batch masuk karantina
+        hanya karena kebetulan tokennya perlu diperbarui saat itu."""
+
+        def handler(r: httpx.Request) -> httpx.Response:
+            if r.url.path == "/api/v1/auth/device/token":
+                return httpx.Response(503, text="sedang dipelihara")
+            return httpx.Response(200, json=_ack_body())
+
+        transport = _transport(handler, client_id="ship-023", secret="rahasia")
+        with pytest.raises(TransportUnavailableError):
+            await transport.send(_envelope(), b"x" * 100)
+
+    async def test_tanpa_kredensial_401_tidak_memicu_penukaran(self) -> None:
+        """Konfigurasi hanya dengan token statis harus tetap berperilaku seperti
+        sebelumnya: 401 ditolak, bukan memicu penukaran yang mustahil."""
+        seen: list[httpx.Request] = []
+
+        def handler(r: httpx.Request) -> httpx.Response:
+            seen.append(r)
+            return httpx.Response(401, json={"error": "tidak sah"})
+
+        with pytest.raises(TransportRejectedError):
+            await _transport(handler, token="statis").send(_envelope(), b"x" * 100)
+        assert all(r.url.path != "/api/v1/auth/device/token" for r in seen)

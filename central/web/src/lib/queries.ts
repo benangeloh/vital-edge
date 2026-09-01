@@ -88,6 +88,33 @@ export function useAcknowledgeAlert() {
   });
 }
 
+export interface OnboardResult {
+  ship_id: string;
+  slug: string;
+  name: string;
+  device_id: string;
+  client_id: string;
+  /** Hanya dikembalikan sekali, saat penerbitan. Tidak pernah bisa dibaca ulang. */
+  client_secret: string;
+}
+
+export interface OnboardInput {
+  name: string;
+  slug: string;
+  imo_number?: string;
+  device_name?: string;
+  hardware?: string;
+}
+
+export function useOnboardShip() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: OnboardInput) =>
+      (await api.post<OnboardResult>("/api/v1/ships/onboard", input)).data,
+    onSuccess: () => client.invalidateQueries({ queryKey: ["fleet"] }),
+  });
+}
+
 export function useSystemHealth() {
   return useQuery({
     queryKey: ["health"],

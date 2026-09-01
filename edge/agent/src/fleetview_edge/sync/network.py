@@ -18,6 +18,7 @@ tempat yang kira-kira sama.
 
 from __future__ import annotations
 
+import asyncio
 from typing import Any
 
 import httpx
@@ -50,9 +51,25 @@ seluruh progres — potongan kecil membuat kemajuan bisa dipertahankan.
 class NetworkTransport(TransportAdapter):
     """Mengirim batch ke central lewat HTTPS.
 
+    Autentikasi punya dua bentuk, dan yang kedua adalah yang dipakai di kapal:
+
+    - `token` — JWT statis. Praktis untuk pengujian, tetapi **kedaluwarsa**
+      (default satu jam di central). Kapal yang hanya dibekali ini akan berhenti
+      menyetor data satu jam setelah dinyalakan, dan tidak akan pulih sampai ada
+      orang yang mengganti berkas konfigurasinya.
+    - `client_id` + `secret` — kredensial jangka panjang yang ditukar menjadi
+      token saat dibutuhkan, dan ditukar ulang secara otomatis ketika token
+      kedaluwarsa. **Ini yang dipakai di produksi.**
+
+    Bentuk kedua juga yang membuat pencabutan kredensial berarti: begitu central
+    mencabutnya, penukaran berikutnya gagal dan kapal berhenti bisa mengirim.
+    Dengan token statis, pencabutan tidak berpengaruh sampai token itu sendiri
+    kedaluwarsa.
+
     Args:
         base_url: alamat central.
-        token: kredensial device.
+        token: JWT device statis. Untuk pengujian; lihat catatan di atas.
+        client_id, secret: kredensial device jangka panjang.
         kind: jenis link yang diwakili (untuk pelaporan status).
         chunk_size: ukuran potongan saat memakai sesi berpotongan.
         single_shot_limit: di bawah ukuran ini, kirim sekali jalan tanpa sesi.
@@ -63,6 +80,8 @@ class NetworkTransport(TransportAdapter):
         *,
         base_url: str,
         token: str = "",
+        client_id: str = "",
+        secret: str = "",
         kind: TransportKind = TransportKind.LAN,
         chunk_size: int = 262_144,
         single_shot_limit: int = DEFAULT_SINGLE_SHOT_LIMIT,
@@ -73,12 +92,70 @@ class NetworkTransport(TransportAdapter):
         self._base = base_url.rstrip("/")
         self._chunk_size = chunk_size
         self._single_shot_limit = single_shot_limit
-        headers = {"Authorization": f"Bearer {token}"} if token else {}
-        self._client = client or httpx.AsyncClient(
-            base_url=self._base, timeout=timeout_seconds, headers=headers
-        )
+        self._client_id = client_id
+        self._secret = secret
+        self._token = token
+        self._client = client or httpx.AsyncClient(base_url=self._base, timeout=timeout_seconds)
         self._owns_client = client is None
-        self._counters = {"sent": 0, "resumed": 0, "bytes": 0}
+        self._counters = {"sent": 0, "resumed": 0, "bytes": 0, "token_refresh": 0}
+        # Satu penukaran pada satu waktu. Tanpa ini, beberapa permintaan yang
+        # bersamaan menemui 401 akan menukar kredensial serentak — memenuhi
+        # rate limit `auth` di central dengan permintaan yang saling menduplikasi.
+        self._auth_lock = asyncio.Lock()
+
+    @property
+    def _can_refresh(self) -> bool:
+        return bool(self._client_id and self._secret)
+
+    def _auth_header(self) -> dict[str, str]:
+        return {"Authorization": f"Bearer {self._token}"} if self._token else {}
+
+    async def _obtain_token(self) -> None:
+        """Tukar kredensial jangka panjang dengan token baru.
+
+        Kegagalan di sini dilaporkan sebagai `TransportUnavailableError`, bukan
+        `TransportRejectedError`, kecuali kredensialnya memang ditolak. Central
+        yang sedang mati tidak boleh membuat batch masuk karantina hanya karena
+        kebetulan tokennya perlu diperbarui saat itu.
+        """
+        async with self._auth_lock:
+            try:
+                response = await self._client.post(
+                    "/api/v1/auth/device/token",
+                    json={"client_id": self._client_id, "secret": self._secret},
+                )
+            except httpx.HTTPError as exc:
+                raise TransportUnavailableError(
+                    f"tidak bisa menjangkau central untuk menukar kredensial: {exc}",
+                    details={"path": "/api/v1/auth/device/token"},
+                ) from exc
+
+            if response.status_code == 401:
+                # Kredensial salah atau sudah dicabut. Ini TIDAK bisa diperbaiki
+                # dengan mencoba ulang, dan mencoba terus hanya akan menabrak
+                # rate limit auth di central.
+                raise TransportRejectedError(
+                    "central menolak kredensial device (HTTP 401) — "
+                    "kemungkinan sudah dicabut atau salah disalin",
+                    details={"status": 401, "client_id": self._client_id},
+                )
+            if response.status_code >= 400:
+                raise TransportUnavailableError(
+                    f"penukaran kredensial gagal (HTTP {response.status_code})",
+                    details={"status": response.status_code, "body": response.text[:300]},
+                )
+
+            body = response.json()
+            data = body.get("data", body)
+            token = data.get("access_token")
+            if not token:
+                raise TransportRejectedError(
+                    "jawaban penukaran kredensial tidak memuat access_token",
+                    details={"body": str(data)[:300]},
+                )
+            self._token = str(token)
+            self._counters["token_refresh"] += 1
+            log.info("sync.token_refreshed", client_id=self._client_id)
 
     # -- ketersediaan -------------------------------------------------------
 
@@ -188,13 +265,18 @@ class NetworkTransport(TransportAdapter):
     # -- HTTP ---------------------------------------------------------------
 
     async def _request(self, method: str, path: str, **kwargs: Any) -> httpx.Response:
-        try:
-            response = await self._client.request(method, path, **kwargs)
-        except httpx.HTTPError as exc:
-            raise TransportUnavailableError(
-                f"tidak bisa menjangkau central: {exc}",
-                details={"path": path},
-            ) from exc
+        response = await self._send_request(method, path, **kwargs)
+
+        # 401 pada permintaan yang membawa token biasanya berarti token itu
+        # kedaluwarsa, bukan bahwa kredensialnya buruk. Tukar sekali lalu ulangi.
+        #
+        # Sekali, bukan dalam loop: kalau permintaan kedua tetap 401 dengan token
+        # yang baru saja diterbitkan, masalahnya bukan kedaluwarsa, dan mengulang
+        # terus hanya akan menabrak rate limit auth di central.
+        if response.status_code == 401 and self._can_refresh:
+            log.info("sync.token_kedaluwarsa", path=path)
+            await self._obtain_token()
+            response = await self._send_request(method, path, **kwargs)
 
         if response.status_code < 400:
             return response
@@ -214,6 +296,18 @@ class NetworkTransport(TransportAdapter):
             f"central menolak batch (HTTP {response.status_code}): {body}",
             details=details,
         )
+
+    async def _send_request(self, method: str, path: str, **kwargs: Any) -> httpx.Response:
+        if not self._token and self._can_refresh:
+            await self._obtain_token()
+        headers = {**self._auth_header(), **kwargs.pop("headers", {})}
+        try:
+            return await self._client.request(method, path, headers=headers, **kwargs)
+        except httpx.HTTPError as exc:
+            raise TransportUnavailableError(
+                f"tidak bisa menjangkau central: {exc}",
+                details={"path": path},
+            ) from exc
 
     @staticmethod
     def _parse_ack(response: httpx.Response, envelope: BatchEnvelope) -> Ack:

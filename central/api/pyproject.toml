@@ -26,3 +26,4 @@ packages = ["src/fleetview_central"]
 
 [project.scripts]
 fleetview-central = "fleetview_central.__main__:main"
+fleetview-admin = "fleetview_central.admin:main"

@@ -15,6 +15,7 @@ members = [
     "fleetview-contracts",
     "fleetview-edge-agent",
     "fleetview-edge-console",
+    "fleetview-simulator",
     "fleetview-usb-import",
 ]
 
@@ -638,6 +639,23 @@ requires-dist = [
     { name = "fleetview-common", editable = "shared/common" },
     { name = "jinja2", specifier = ">=3.1" },
     { name = "python-multipart", specifier = ">=0.0.20" },
+]
+
+[[package]]
+name = "fleetview-simulator"
+version = "0.1.0"
+source = { editable = "tools/fleet_simulator" }
+dependencies = [
+    { name = "fleetview-common" },
+    { name = "fleetview-contracts" },
+    { name = "fleetview-edge-agent" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "fleetview-common", editable = "shared/common" },
+    { name = "fleetview-contracts", editable = "shared/contracts" },
+    { name = "fleetview-edge-agent", editable = "edge/agent" },
 ]
 
 [[package]]

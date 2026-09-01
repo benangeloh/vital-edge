@@ -12,6 +12,7 @@ members = [
     "edge/console",
     "central/api",
     "tools/usb_import",
+    "tools/fleet_simulator",
 ]
 
 [tool.uv.sources]
@@ -19,6 +20,8 @@ fleetview-contracts = { workspace = true }
 fleetview-common    = { workspace = true }
 fleetview-edge-console = { workspace = true }
 fleetview-usb-import   = { workspace = true }
+fleetview-simulator    = { workspace = true }
+fleetview-edge-agent   = { workspace = true }
 
 [dependency-groups]
 dev = [
@@ -43,6 +46,7 @@ src = [
     "edge/console/src",
     "central/api/src",
     "tools/usb_import/src",
+    "tools/fleet_simulator/src",
 ]
 
 [tool.ruff.lint]
@@ -72,12 +76,13 @@ ignore = [
 [tool.ruff.lint.per-file-ignores]
 "**/tests/**" = ["S101"]
 "shared/contracts/scripts/*" = ["T20"]   # skrip generator memang mencetak progres
+"scripts/*" = ["T20"]                    # skrip dev memang berkomunikasi lewat stdout
 
 [tool.ruff.lint.isort]
 known-first-party = [
     "fleetview_contracts", "fleetview_common",
     "fleetview_edge", "fleetview_console", "fleetview_central",
-    "fleetview_usb_import",
+    "fleetview_usb_import", "fleetview_simulator",
 ]
 
 # ---------------------------------------------------------------- mypy
@@ -93,6 +98,7 @@ mypy_path = [
     "edge/console/src",
     "central/api/src",
     "tools/usb_import/src",
+    "tools/fleet_simulator/src",
 ]
 explicit_package_bases = true
 namespace_packages = true
@@ -123,6 +129,8 @@ testpaths = [
     "edge/console/tests",
     "central/api/tests",
     "tools/usb_import/tests",
+    "tests/load",
+    "tests/security",
     "tests/e2e",
 ]
 # importlib: monorepo ini punya beberapa test_settings.py di package berbeda.
@@ -138,6 +146,8 @@ addopts = [
 markers = [
     "integration: butuh layanan eksternal (Postgres/InfluxDB) — dilewati secara default",
     "e2e: simulasi armada end-to-end; butuh Postgres + InfluxDB",
+    "load: uji beban skala armada; lebih lambat, dijalankan terpisah",
+    "security: pemeriksaan keamanan; butuh Postgres + InfluxDB",
 ]
 
 # ---------------------------------------------------------------- coverage
@@ -150,6 +160,7 @@ source = [
     "edge/console/src",
     "central/api/src",
     "tools/usb_import/src",
+    "tools/fleet_simulator/src",
 ]
 omit = ["*/tests/*", "*/__main__.py"]
 

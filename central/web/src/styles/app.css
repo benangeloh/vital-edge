@@ -662,3 +662,130 @@
   .fleet-bar__legend { gap: var(--space-4); }
   .fields { grid-template-columns: 1fr; }
 }
+
+/* ---------------------------------------------------------------- onboarding
+ *
+ * Dialog onboarding kapal. Memakai token yang sudah ada — tidak ada warna baru;
+ * yang membedakan blok rahasia hanya latar peringatan yang sudah dipakai di
+ * tempat lain untuk arti yang sama.
+ */
+
+.section__actions { display: flex; gap: var(--space-2); align-items: center; }
+
+.btn--small { padding: var(--space-1) var(--space-3); font-size: var(--text-xs); }
+
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: color-mix(in oklab, var(--green-deep) 55%, transparent);
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: var(--space-7) var(--space-4);
+  overflow-y: auto;
+  z-index: 50;
+}
+
+.modal {
+  width: min(38rem, 100%);
+  background: var(--white);
+  border: var(--border-thin);
+  border-radius: var(--radius-lg);
+  padding: var(--space-6);
+  box-shadow: 0 12px 32px color-mix(in oklab, var(--green-deep) 22%, transparent);
+}
+
+.modal__title { font-size: var(--text-xl); margin: 0 0 var(--space-2); }
+.modal__desc { color: var(--text-muted); font-size: var(--text-sm); margin: 0 0 var(--space-5); }
+
+.modal__warn {
+  background: var(--status-warn-bg);
+  border-left: 3px solid var(--status-warn);
+  padding: var(--space-3) var(--space-4);
+  font-size: var(--text-sm);
+  line-height: 1.5;
+  margin: 0 0 var(--space-5);
+}
+
+.modal__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-2);
+  margin-top: var(--space-5);
+}
+
+.formfield { display: block; margin-bottom: var(--space-4); }
+.formfield__label {
+  display: block;
+  font-size: var(--text-xs);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin-bottom: var(--space-1);
+}
+.formfield__opt { font-weight: 400; text-transform: none; letter-spacing: 0; color: var(--text-faint); }
+.formfield__input {
+  width: 100%;
+  padding: var(--space-2) var(--space-3);
+  font: inherit;
+  font-size: var(--text-sm);
+  border: var(--border-thin);
+  border-radius: var(--radius);
+  background: var(--white);
+  color: var(--text);
+}
+.formfield__input:focus-visible {
+  outline: 2px solid var(--green-primary);
+  outline-offset: 1px;
+  border-color: var(--green-primary);
+}
+.formfield__hint {
+  display: block;
+  margin-top: var(--space-1);
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+  line-height: 1.45;
+}
+
+.formerror {
+  background: var(--status-crit-bg);
+  border-left: 3px solid var(--status-crit);
+  padding: var(--space-3) var(--space-4);
+  font-size: var(--text-sm);
+  margin: 0 0 var(--space-4);
+}
+
+.snippet { border: var(--border-thin); border-radius: var(--radius); margin-bottom: var(--space-4); }
+.snippet--secret { border-color: var(--status-warn); }
+.snippet__head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  border-bottom: var(--border-thin);
+}
+.snippet__title { margin: 0; font-size: var(--text-sm); font-weight: 600; }
+.snippet__hint { margin: 0; font-size: var(--text-xs); color: var(--text-muted); }
+.snippet__body {
+  margin: 0;
+  padding: var(--space-3) var(--space-4);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  line-height: 1.6;
+  background: var(--surface);
+  /* Kredensial panjang tidak boleh terpotong: yang tidak terlihat tidak akan
+   * ikut tersalin saat pemakai menyorotnya manual. */
+  white-space: pre-wrap;
+  word-break: break-all;
+  overflow-x: auto;
+}
+
+.checkfield {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--text-sm);
+  margin-top: var(--space-4);
+}

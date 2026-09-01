@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import os
+
 import pytest
 
 from fleetview_central.settings import ApiSettings
@@ -43,6 +45,20 @@ def test_postgres_localhost_di_produksi_ditolak() -> None:
         _prod(postgres_dsn="postgresql+asyncpg://u:p@localhost:5432/f").verify_production_ready()
 
 
-def test_cors_default_kosong() -> None:
+def test_cors_default_kosong(monkeypatch: pytest.MonkeyPatch) -> None:
     """Daftar origin yang longgar adalah cara paling mudah membocorkan API internal."""
-    assert ApiSettings().cors_origins == []
+    assert _default_settings(monkeypatch).cors_origins == []
+
+
+def _default_settings(monkeypatch: pytest.MonkeyPatch) -> ApiSettings:
+    """ApiSettings tanpa pengaruh apa pun dari luar.
+
+    Menguji "nilai default" sambil membaca berkas `.env` pengembang berarti tidak
+    menguji default sama sekali — dan `.env` itu justru langkah wajib di
+    docs/operations/00-menjalankan.md, sehingga test seperti itu gagal di mesin
+    siapa pun yang mengikuti panduannya, tetapi lolos di CI yang tidak punya `.env`.
+    """
+    for key in list(os.environ):
+        if key.startswith("FLEETVIEW_"):
+            monkeypatch.delenv(key, raising=False)
+    return ApiSettings(_env_file=None)

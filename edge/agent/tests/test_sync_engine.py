@@ -178,10 +178,26 @@ class TestSyncBerhasil:
         assert [r.seq for r in readings] == [1, 2, 3, 4, 5]
 
     async def test_batch_dipecah_menurut_max_records(self, store: OutboxStore) -> None:
+        """`max_records` dihormati pada batas chunk, bukan per pembacaan.
+
+        Satu baris outbox menyimpan sekelompok pembacaan sekaligus supaya bisa
+        dikompresi bersama, dan state melekat pada baris itu. Memecah di tengah
+        chunk akan menandai seluruh chunk terkirim padahal sebagiannya tidak.
+        Di sini tiap `append` menghasilkan satu chunk berisi 3 pembacaan.
+        """
+        for i in range(4):
+            store.append(_records(3, start=1 + i * 3))
+        transport = FakeTransport()
+        await _engine(store, transport, max_records=4).sync_once()
+        assert [e.record_count for e in transport.delivered] == [3, 3, 3, 3]
+
+    async def test_chunk_tunggal_tidak_dipotong_di_tengah(self, store: OutboxStore) -> None:
+        """Lebih baik satu batch sedikit melebihi max_records daripada menandai
+        separuh chunk terkirim — yang berarti kehilangan data tanpa jejak."""
         store.append(_records(10))
         transport = FakeTransport()
         await _engine(store, transport, max_records=3).sync_once()
-        assert [e.record_count for e in transport.delivered] == [3, 3, 3, 1]
+        assert [e.record_count for e in transport.delivered] == [10]
 
 
 class TestBatchGanda:
@@ -532,7 +548,7 @@ class TestLoopDanExport:
                 manager=NetworkManager([slot]),
                 backoff=NO_WAIT,
             )
-            assert await engine.export_to(slot) == 2
+            assert await engine.export_to(slot) == 1
 
             ok, problems = FileExportTransport.verify_package(Path(tmp) / "SHIP-001")
             assert ok, problems

@@ -1,0 +1,13 @@
+[Unit]
+Description=Cadangan harian outbox FleetView
+
+[Timer]
+OnCalendar=daily
+# Pi kapal sering mati listrik. Persistent memastikan pencadangan yang terlewat
+# dijalankan saat menyala kembali, bukan dilewati diam-diam.
+Persistent=true
+# Sebar agar 70 kapal tidak menulis serentak bila kebetulan menyala bersamaan.
+RandomizedDelaySec=1h
+
+[Install]
+WantedBy=timers.target

@@ -16,7 +16,7 @@ from __future__ import annotations
 
 from typing import Final
 
-SCHEMA_VERSION: Final[int] = 1
+SCHEMA_VERSION: Final[int] = 2
 
 DDL: Final[str] = """
 PRAGMA journal_mode = WAL;
@@ -56,17 +56,22 @@ CREATE INDEX IF NOT EXISTS ix_batches_state
     ON batches(state, priority, next_attempt_at);
 
 CREATE TABLE IF NOT EXISTS outbox (
-    sequence    INTEGER PRIMARY KEY,
-    captured_at INTEGER NOT NULL,
-    priority    INTEGER NOT NULL,
-    payload     TEXT    NOT NULL,
-    state       TEXT    NOT NULL,
-    batch_id    TEXT REFERENCES batches(batch_id) ON DELETE SET NULL
+    -- Satu baris = satu chunk, yaitu satu kali panggilan append() dari
+    -- collector (umumnya satu putaran polling, ~100 pembacaan). BUKAN satu
+    -- baris per pembacaan. Lihat store.py untuk alasan terukurnya.
+    sequence_start INTEGER PRIMARY KEY,
+    sequence_end   INTEGER NOT NULL,
+    record_count   INTEGER NOT NULL,
+    captured_at    INTEGER NOT NULL,   -- timestamp tertua di dalam chunk
+    priority       INTEGER NOT NULL,
+    payload        BLOB    NOT NULL,   -- gzip(JSON array of TelemetryRecord)
+    state          TEXT    NOT NULL,
+    batch_id       TEXT REFERENCES batches(batch_id) ON DELETE SET NULL
 );
 
--- Jalur query terpanas: "baris pending berikutnya menurut prioritas".
+-- Jalur query terpanas: "chunk pending berikutnya menurut prioritas".
 CREATE INDEX IF NOT EXISTS ix_outbox_pending
-    ON outbox(state, priority, sequence);
+    ON outbox(state, priority, sequence_start);
 
 CREATE INDEX IF NOT EXISTS ix_outbox_batch
     ON outbox(batch_id);

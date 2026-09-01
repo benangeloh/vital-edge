@@ -1,0 +1,80 @@
+# Edge Agent — satu unit per kapal, dijalankan di Raspberry Pi.
+#
+# Perangkatnya tidak punya pengawas. Semua pilihan di sini bertujuan tunggal:
+# kapal tetap mengumpulkan data tanpa ada orang yang menyentuhnya.
+
+[Unit]
+Description=FleetView Edge Agent
+Documentation=file:///opt/fleetview/docs/operations/01-deployment.md
+After=network.target influxdb.service
+# Wants, bukan Requires: InfluxDB yang mati TIDAK boleh menghentikan akuisisi.
+# Outbox adalah write barrier-nya; InfluxDB berada di hilir dan boleh menyusul.
+Wants=influxdb.service
+
+[Service]
+Type=notify
+# notify, bukan simple: unit baru dianggap aktif setelah akuisisi benar-benar
+# berjalan, bukan sekadar setelah proses ada.
+NotifyAccess=main
+
+User=fleetview
+Group=fleetview
+WorkingDirectory=/opt/fleetview
+
+Environment=FLEETVIEW_ENV=production
+Environment=PYTHONUNBUFFERED=1
+EnvironmentFile=/etc/fleetview/agent.env
+# Kredensial dipisah dari konfigurasi supaya berkas konfigurasi bisa dibaca dan
+# disalin saat diagnosis tanpa ikut membocorkan token.
+EnvironmentFile=-/etc/fleetview/secrets.env
+
+ExecStart=/opt/fleetview/venv/bin/fleetview-edge --config /etc/fleetview/edge.yaml
+
+Restart=always
+RestartSec=5
+# Tanpa batas percobaan. Default systemd menyerah setelah 5 restart dalam 10
+# detik dan meninggalkan unit mati — di kapal itu berarti akuisisi berhenti
+# sampai ada orang yang naik. Lebih baik mencoba selamanya dengan jeda.
+StartLimitIntervalSec=0
+
+# Watchdog. Agent membuktikan dirinya masih bekerja tiap 30 detik; kalau bukti
+# berhenti, systemd membunuh dan menjalankannya ulang. Ini menangkap kegagalan
+# yang Restart=always tidak bisa lihat: proses hidup yang berhenti bekerja.
+WatchdogSec=60
+
+# Penghentian rapi. Agent menutup outbox dan tidak meninggalkan transaksi
+# menggantung. 30 detik cukup longgar untuk fsync pada SD card yang lambat.
+KillSignal=SIGTERM
+TimeoutStopSec=30
+
+# Prioritas I/O di atas normal: fsync outbox berada di jalur kritis durabilitas,
+# dan pada SD card ia mudah kalah bersaing dengan compaction InfluxDB.
+IOSchedulingClass=best-effort
+IOSchedulingPriority=2
+
+# Pengetatan. Agent hanya perlu menulis ke direktori datanya dan membaca port
+# serial; selebihnya ditutup.
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictSUIDSGID=yes
+ReadWritePaths=/var/lib/fleetview
+# Port serial ke LP-A104. Sesuaikan bila perangkat terpasang di jalur lain.
+DeviceAllow=/dev/ttyUSB0 rw
+SupplementaryGroups=dialout
+
+# Batas memori. Diukur di Phase 9: puncak ~167 MB untuk 100 sensor. 512 MB
+# memberi jarak longgar sekaligus mengubah kebocoran memori menjadi restart
+# yang terlihat, bukan Pi yang mati kehabisan RAM.
+MemoryMax=512M
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=fleetview-agent
+
+[Install]
+WantedBy=multi-user.target

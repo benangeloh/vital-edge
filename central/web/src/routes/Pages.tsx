@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { OnboardShipDialog } from "@/components/OnboardShipDialog";
 import { ShipTable } from "@/components/ShipTable";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { EmptyState, ErrorState, Loading, Panel, Section } from "@/components/ui/Primitives";
@@ -8,6 +9,7 @@ import { STATUS_META, shipStatus, summarise } from "@/lib/status";
 
 export function ShipsPage({ search }: { search: string }) {
   const { data: ships, isLoading, error, refetch } = useFleet();
+  const [onboarding, setOnboarding] = useState(false);
   const now = Date.now();
 
   const filtered = useMemo(() => {
@@ -33,9 +35,17 @@ export function ShipsPage({ search }: { search: string }) {
           {search ? ` cocok dengan "${search}"` : ""}
         </p>
       </div>
-      <Section title="Daftar kapal">
+      <Section
+        title="Daftar kapal"
+        actions={
+          <button type="button" className="btn btn--primary" onClick={() => setOnboarding(true)}>
+            Tambah kapal
+          </button>
+        }
+      >
         <ShipTable ships={filtered} now={now} />
       </Section>
+      {onboarding && <OnboardShipDialog onClose={() => setOnboarding(false)} />}
     </>
   );
 }

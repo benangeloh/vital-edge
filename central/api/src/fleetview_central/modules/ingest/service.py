@@ -25,6 +25,7 @@ from uuid import UUID
 
 from sqlalchemy import func, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from fleetview_central.modules.fleet.models import Sensor
@@ -37,6 +38,17 @@ from fleetview_central.modules.ingest.models import (
 from fleetview_central.platform.influx import InfluxGateway
 from fleetview_common import ValidationError, get_logger, log_context, now_utc
 from fleetview_contracts import Ack, BatchEnvelope, BatchStatus, Reading, SyncState
+
+
+def _is_batch_range_conflict(exc: IntegrityError) -> bool:
+    """Benar hanya untuk pelanggaran `uq_batch_range`.
+
+    Diperiksa dengan nama constraint, bukan dengan menangkap semua
+    IntegrityError: pelanggaran foreign key atau constraint lain menandakan bug,
+    dan menyamarkannya sebagai "sequence terpakai ulang" akan menyembunyikannya.
+    """
+    return "uq_batch_range" in str(getattr(exc, "orig", exc))
+
 
 __all__ = ["IngestService"]
 
@@ -141,29 +153,49 @@ class IngestService:
 
             # Ledger lebih dulu, dalam transaksi ini. ON CONFLICT menangani dua
             # percobaan yang datang bersamaan — yang kedua tidak menggandakan.
-            await self._db.execute(
-                pg_insert(SyncBatch)
-                .values(
-                    batch_id=envelope.batch_id,
-                    ship_id=ship_id,
-                    device_id=envelope.device_id,
-                    sequence_start=envelope.sequence_start,
-                    sequence_end=envelope.sequence_end,
-                    first_timestamp=envelope.first_timestamp,
-                    last_timestamp=envelope.last_timestamp,
-                    record_count=envelope.record_count,
-                    payload_checksum=envelope.payload_checksum,
-                    payload_encoding=envelope.payload_encoding,
-                    payload_size=envelope.payload_size,
-                    schema_version=envelope.schema_version,
-                    agent_version=envelope.agent_version,
-                    config_version=envelope.config_version,
-                    transport=transport,
-                    status="staging",
+            try:
+                await self._db.execute(
+                    pg_insert(SyncBatch)
+                    .values(
+                        batch_id=envelope.batch_id,
+                        ship_id=ship_id,
+                        device_id=envelope.device_id,
+                        sequence_start=envelope.sequence_start,
+                        sequence_end=envelope.sequence_end,
+                        first_timestamp=envelope.first_timestamp,
+                        last_timestamp=envelope.last_timestamp,
+                        record_count=envelope.record_count,
+                        payload_checksum=envelope.payload_checksum,
+                        payload_encoding=envelope.payload_encoding,
+                        payload_size=envelope.payload_size,
+                        schema_version=envelope.schema_version,
+                        agent_version=envelope.agent_version,
+                        config_version=envelope.config_version,
+                        transport=transport,
+                        status="staging",
+                    )
+                    .on_conflict_do_nothing(index_elements=["batch_id"])
                 )
-                .on_conflict_do_nothing(index_elements=["batch_id"])
-            )
-            await self._db.flush()
+                await self._db.flush()
+            except IntegrityError as exc:
+                if not _is_batch_range_conflict(exc):
+                    raise
+                raise ValidationError(
+                    "rentang sequence ini sudah pernah diterima dari kapal tersebut "
+                    "dengan batch_id berbeda — nomor sequence kapal mundur",
+                    code="ingest.sequence_reused",
+                    details={
+                        "ship_id": str(ship_id),
+                        "sequence_start": envelope.sequence_start,
+                        "sequence_end": envelope.sequence_end,
+                        "batch_id": str(envelope.batch_id),
+                        "tindakan": (
+                            "naikkan counter sequence di kapal di atas "
+                            "highest_sequence_seen; lihat "
+                            "docs/operations/06-device-replacement.md"
+                        ),
+                    },
+                ) from exc
 
             # InfluxDB kedua. Kalau gagal, exception naik, transaksi di-rollback,
             # tidak ada ACK — dan kapal akan mengulang. Central tidak pernah

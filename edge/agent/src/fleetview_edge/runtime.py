@@ -43,6 +43,7 @@ from fleetview_edge.sync import (
     TransportKind,
     TransportSlot,
 )
+from fleetview_edge.watchdog import SystemdNotifier
 
 __all__ = ["EdgeRuntime", "run"]
 
@@ -121,6 +122,8 @@ class EdgeRuntime:
                     adapter=NetworkTransport(
                         base_url=cfg.sync.central_url,
                         token=cfg.sync.device_token,
+                        client_id=cfg.sync.device_client_id,
+                        secret=cfg.sync.device_secret,
                         kind=TransportKind.LAN,
                     )
                 )
@@ -192,6 +195,15 @@ class EdgeRuntime:
         if self.console is not None:
             tasks.append(asyncio.create_task(self._serve_console(), name="console"))
 
+        notifier = SystemdNotifier()
+        if notifier.enabled:
+            notifier.ready()
+            interval = notifier.interval_seconds
+            if interval is not None:
+                tasks.append(
+                    asyncio.create_task(self._heartbeat(notifier, interval), name="watchdog")
+                )
+
         log.info(
             "edge_runtime.started",
             components=[t.get_name() for t in tasks],
@@ -200,6 +212,8 @@ class EdgeRuntime:
         try:
             await self._stopping.wait()
         finally:
+            notifier.stopping()
+            notifier.close()
             self.collector.stop()
             self.sync.stop()
             for task in tasks:
@@ -210,6 +224,46 @@ class EdgeRuntime:
             if self.outbox is not None:
                 self.outbox.close()
             log.info("edge_runtime.stopped")
+
+    async def _heartbeat(self, notifier: SystemdNotifier, interval: float) -> None:
+        """Laporkan hidup ke systemd — tetapi hanya bila akuisisi benar-benar maju.
+
+        Ini inti dari watchdog. Ping tanpa syarat hanya membuktikan event loop
+        berputar, dan itu justru bukan kegagalan yang perlu ditangkap: proses
+        yang loop akuisisinya tersangkut pada pembacaan serial yang tidak pernah
+        kembali akan tetap mem-ping dengan riang sementara kapal berhenti
+        mengumpulkan data.
+
+        Jadi yang diperiksa adalah `polls_attempted` benar-benar bertambah. Kalau
+        tidak, ping dihentikan, dan systemd yang memutuskan — persis seperti yang
+        diinginkan pada perangkat tanpa pengawas.
+
+        Yang dipakai `polls_attempted`, bukan `polls_succeeded`: perangkat yang
+        mati atau kabel yang lepas membuat polling gagal terus-menerus, dan itu
+        bukan sesuatu yang bisa diperbaiki dengan restart. Merestart agent
+        berulang kali dalam keadaan itu hanya membuang siklus akuisisi dan
+        menyulitkan diagnosis.
+        """
+        assert self.collector is not None
+        # -1 menjamin satu ping pada iterasi pertama, apa pun keadaannya. Itu
+        # kelonggaran start-up yang disengaja: poll pertama bisa lambat saat
+        # negosiasi perangkat, dan merestart karenanya adalah restart palsu.
+        last_polls = -1
+        while not self._stopping.is_set():
+            polls = self.collector.stats.polls_attempted
+            if polls != last_polls:
+                notifier.alive()
+                last_polls = polls
+            else:
+                log.warning(
+                    "watchdog.akuisisi_tidak_maju",
+                    polls_attempted=polls,
+                    note="ping dihentikan; systemd akan merestart bila terus begini",
+                )
+            if self.outbox is not None:
+                notifier.status(f"polls={polls} pending={self.outbox.pending_count()} record")
+            with contextlib.suppress(TimeoutError):
+                await asyncio.wait_for(self._stopping.wait(), timeout=interval)
 
     async def _serve_console(self) -> None:
         assert self.console is not None

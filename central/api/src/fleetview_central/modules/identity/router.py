@@ -79,4 +79,23 @@ async def me(user: CurrentUser) -> dict[str, Any]:
 
 
 def _client_ip(request: Request) -> str | None:
+    """Alamat klien untuk audit log.
+
+    Di belakang reverse proxy, `request.client.host` selalu berisi alamat
+    loopback proxy-nya. Audit log yang setiap barisnya berbunyi 127.0.0.1 tidak
+    bisa dipakai menyelidiki apa pun, jadi `X-Forwarded-For` dibaca — tetapi
+    hanya bila konfigurasi menyatakan ada proxy tepercaya di depan.
+
+    Yang diambil entri **terakhir**, bukan pertama. nginx menambahkan alamat
+    peer yang benar-benar ia lihat ke ujung header
+    (`$proxy_add_x_forwarded_for`), sedangkan entri-entri sebelumnya berasal dari
+    klien dan bisa dipalsukan seluruhnya.
+    """
+    settings = getattr(request.app.state, "settings", None)
+    if getattr(settings, "trust_proxy_headers", False):
+        forwarded = request.headers.get("x-forwarded-for")
+        if forwarded:
+            candidate = forwarded.rsplit(",", 1)[-1].strip()
+            if candidate:
+                return candidate
     return request.client.host if request.client else None

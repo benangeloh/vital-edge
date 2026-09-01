@@ -47,6 +47,18 @@ class ApiSettings(BaseSettings):
     """Origin dashboard. Sengaja kosong secara default — daftar yang terlalu
     longgar adalah cara paling mudah membocorkan API internal."""
 
+    trust_proxy_headers: bool = False
+    """Percayai `X-Forwarded-For` untuk menentukan alamat klien.
+
+    Default False, dan itu disengaja. Header ini dikirim oleh klien, jadi
+    mempercayainya tanpa reverse proxy di depan berarti siapa pun bisa memalsukan
+    alamatnya sendiri di audit log — persis membalik gunanya audit log.
+
+    Aktifkan HANYA bila ada reverse proxy yang menimpa header ini, seperti
+    konfigurasi nginx di deploy/nginx/. Tanpa itu, di produksi setiap baris audit
+    akan mencatat 127.0.0.1 dan tidak berguna saat menyelidiki insiden.
+    """
+
     @field_validator("log_level")
     @classmethod
     def _check_level(cls, v: str) -> str:

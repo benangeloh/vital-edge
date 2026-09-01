@@ -1,0 +1,49 @@
+# Central Platform — satu unit, satu proses (modular monolith).
+#
+# Modularitasnya ada di batas kode, bukan di batas jaringan. Menjalankannya
+# sebagai satu unit berarti tidak ada service discovery, tidak ada mesh, dan
+# tidak ada kegagalan parsial antar modul yang harus ditangani.
+
+[Unit]
+Description=FleetView Central Platform
+Documentation=file:///opt/fleetview/docs/operations/03-central-deployment.md
+After=network.target postgresql.service influxdb.service
+# Requires di sini, berbeda dari sisi kapal: tanpa PostgreSQL, central tidak
+# bisa menerima ingest sama sekali, jadi berjalan tanpanya tidak ada gunanya.
+Requires=postgresql.service
+
+[Service]
+Type=exec
+User=fleetview
+Group=fleetview
+WorkingDirectory=/opt/fleetview/current
+
+Environment=FLEETVIEW_ENV=production
+Environment=PYTHONUNBUFFERED=1
+EnvironmentFile=/etc/fleetview/central.env
+EnvironmentFile=/etc/fleetview/secrets.env
+
+ExecStart=/opt/fleetview/venv/bin/fleetview-central
+
+Restart=always
+RestartSec=5
+StartLimitIntervalSec=0
+
+# Penghentian rapi. Uvicorn menyelesaikan permintaan yang sedang berjalan lebih
+# dulu; ingest yang terpotong di tengah akan dikirim ulang oleh kapal, tetapi
+# menyelesaikannya lebih murah daripada memutar ulang.
+KillSignal=SIGTERM
+TimeoutStopSec=30
+
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=yes
+ReadWritePaths=/var/lib/fleetview /var/log/fleetview
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=fleetview-central
+
+[Install]
+WantedBy=multi-user.target

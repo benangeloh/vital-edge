@@ -1,0 +1,12 @@
+[Unit]
+Description=Cadangan PostgreSQL dan InfluxDB FleetView
+
+[Service]
+Type=oneshot
+User=fleetview
+Group=fleetview
+EnvironmentFile=/etc/fleetview/central.env
+EnvironmentFile=/etc/fleetview/secrets.env
+ExecStart=/opt/fleetview/current/deploy/scripts/backup-central.sh
+Nice=10
+IOSchedulingClass=idle

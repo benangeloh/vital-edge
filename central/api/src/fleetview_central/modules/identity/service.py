@@ -87,6 +87,50 @@ class IdentityService:
         await self._db.flush()
         return cred
 
+    async def device_credential(self, client_id: str) -> DeviceCredential | None:
+        return (
+            await self._db.execute(
+                select(DeviceCredential).where(DeviceCredential.client_id == client_id)
+            )
+        ).scalar_one_or_none()
+
+    async def credentials_for_device(self, device_id: UUID) -> list[DeviceCredential]:
+        """Kredensial sebuah perangkat, terbaru lebih dulu.
+
+        Rahasianya tidak ikut — di basis data ia hanya ada sebagai hash, jadi
+        memang tidak ada yang bisa dikembalikan.
+        """
+        rows = await self._db.execute(
+            select(DeviceCredential)
+            .where(DeviceCredential.device_id == device_id)
+            .order_by(DeviceCredential.created_at.desc())
+        )
+        return list(rows.scalars().all())
+
+    async def revoke_device_credential(self, client_id: str) -> DeviceCredential | None:
+        """Cabut kredensial sebuah perangkat.
+
+        Baris kredensialnya ditandai, bukan dihapus. Audit log dan penelusuran
+        insiden merujuk padanya, dan pertanyaan "kredensial mana yang dipakai,
+        dan kapan dicabut" hanya bisa dijawab kalau barisnya masih ada.
+
+        Pencabutan berlaku pada penerbitan token berikutnya. Token yang sudah
+        terbit tetap berlaku sampai kedaluwarsa — lihat
+        docs/operations/08-ship-decommissioning.md untuk kasus ketika jendela itu
+        tidak dapat diterima.
+        """
+        cred = (
+            await self._db.execute(
+                select(DeviceCredential).where(DeviceCredential.client_id == client_id)
+            )
+        ).scalar_one_or_none()
+        if cred is None:
+            return None
+        cred.is_active = False
+        cred.revoked_at = now_utc()
+        await self._db.flush()
+        return cred
+
 
 #: Hash Argon2 atas nilai tetap, dipakai untuk menyamakan waktu verifikasi
 #: saat user atau kredensial tidak ditemukan.

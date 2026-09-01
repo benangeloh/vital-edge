@@ -98,8 +98,25 @@ class SyncSettings(BaseModel):
     heartbeat_interval_seconds: int = Field(default=60, gt=0)
     interval_seconds: float = Field(default=10.0, gt=0)
 
+    device_client_id: str = ""
+    device_secret: str = ""
+    """Kredensial device jangka panjang, ditukar menjadi token saat dibutuhkan.
+
+    **Ini yang dipakai di produksi.** Diterbitkan di central dengan
+    `fleetview-admin credential issue`, lalu ditaruh di /etc/fleetview/secrets.env.
+
+    Agent menukarnya sendiri dan menukar ulang otomatis saat token kedaluwarsa.
+    Inilah yang membuat pencabutan kredensial berarti: begitu dicabut, penukaran
+    berikutnya gagal dan kapal berhenti bisa mengirim.
+    """
+
     device_token: str = ""
-    """Kredensial device. Kosong hanya boleh saat pengembangan."""
+    """JWT device statis, sebagai alternatif kredensial di atas.
+
+    Praktis untuk pengujian, tetapi **kedaluwarsa** (default satu jam di central).
+    Kapal yang hanya dibekali ini akan berhenti menyetor data satu jam setelah
+    dinyalakan. Jangan dipakai di kapal.
+    """
 
     max_attempts: int = Field(default=10, gt=0)
     """Setelah sekian kegagalan berturut-turut, batch dikarantina. Datanya

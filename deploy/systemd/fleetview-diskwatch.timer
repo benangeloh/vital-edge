@@ -1,0 +1,9 @@
+[Unit]
+Description=Periksa ruang disk FleetView tiap 15 menit
+
+[Timer]
+OnBootSec=5min
+OnUnitActiveSec=15min
+
+[Install]
+WantedBy=timers.target

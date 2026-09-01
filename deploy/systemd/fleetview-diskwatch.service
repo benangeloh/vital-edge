@@ -1,0 +1,13 @@
+# Pemantauan disk.
+#
+# Kehabisan disk adalah satu-satunya kegagalan yang menghentikan ingest untuk
+# SELURUH armada sekaligus. Ia juga kegagalan yang paling bisa diramalkan —
+# ruang berkurang perlahan dan terukur — sehingga peringatan dini benar-benar
+# berguna, tidak seperti kebanyakan alert.
+
+[Unit]
+Description=Pemantauan ruang disk FleetView
+
+[Service]
+Type=oneshot
+ExecStart=/opt/fleetview/current/deploy/scripts/diskwatch.sh

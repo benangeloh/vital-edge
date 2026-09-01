@@ -2,7 +2,9 @@ import { render } from "@testing-library/react";
 import axe from "axe-core";
 import { MemoryRouter } from "react-router-dom";
 import { describe, expect, it } from "vitest";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { FleetBar } from "@/components/FleetBar";
+import { OnboardShipDialog } from "@/components/OnboardShipDialog";
 import { ShipTable } from "@/components/ShipTable";
 import { Sidebar } from "@/components/shell/Sidebar";
 import { makeShip, minutesAgo } from "./factories";
@@ -49,6 +51,18 @@ describe("aksesibilitas", () => {
 
   it("batang armada tanpa pelanggaran", async () => {
     const violations = await checkA11y(<FleetBar summary={summary} />);
+    expect(violations.map((v) => `${v.id}: ${v.help}`)).toEqual([]);
+  });
+
+  it("dialog tambah kapal tanpa pelanggaran", async () => {
+    // Formulir adalah tempat pelanggaran aksesibilitas paling sering muncul:
+    // input tanpa label, kontras teks bantuan, dan dialog tanpa nama.
+    const client = new QueryClient();
+    const violations = await checkA11y(
+      <QueryClientProvider client={client}>
+        <OnboardShipDialog onClose={() => {}} />
+      </QueryClientProvider>,
+    );
     expect(violations.map((v) => `${v.id}: ${v.help}`)).toEqual([]);
   });
 

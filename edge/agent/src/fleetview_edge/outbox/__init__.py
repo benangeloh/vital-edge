@@ -1,6 +1,6 @@
 """Outbox durable — source of truth untuk data yang belum disetor."""
 
-from fleetview_edge.outbox.models import BatchRow, BatchState, OutboxRow, RecordState
+from fleetview_edge.outbox.models import BatchRow, BatchState, OutboxChunk, RecordState
 from fleetview_edge.outbox.sink import OutboxSink
 from fleetview_edge.outbox.store import (
     OutboxStore,
@@ -12,7 +12,7 @@ from fleetview_edge.outbox.store import (
 __all__ = [
     "BatchRow",
     "BatchState",
-    "OutboxRow",
+    "OutboxChunk",
     "OutboxSink",
     "OutboxStore",
     "RecordState",

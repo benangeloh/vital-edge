@@ -7,19 +7,37 @@ LAN, Wi-Fi, seluler, dan USB semuanya hanya transport yang bisa saling mengganti
 
 ## Status
 
-**Phase 1 — Fondasi.** Belum ada logic bisnis: tidak ada collector sensor,
-tidak ada sync engine, tidak ada dashboard. Lihat
-[peta jalan](docs/architecture/06-roadmap.md).
+**Phase 10 — Pengerasan produksi, selesai.** Seluruh jalur berfungsi ujung ke
+ujung: akuisisi, penyimpanan lokal, sync, ingest central, dashboard, Console
+kapal, dan artefak deployment.
 
-## Persiapan
+Satu hal menghambat commissioning di kapal sungguhan: **jalur baca dari LP-A104
+belum terkonfirmasi** — lihat [status hardware](docs/hardware/LP-A104.md).
+Sampai itu beres, akuisisi dijalankan dengan adapter simulator.
+
+Lihat [peta jalan](docs/architecture/06-roadmap.md) untuk yang tersisa.
+
+## Mulai cepat
 
 Butuh [uv](https://docs.astral.sh/uv/), [pnpm](https://pnpm.io/), dan Docker.
 
 ```bash
-make setup     # pasang dependency Python + Node
-make up        # nyalakan Postgres + InfluxDB untuk pengembangan
-make check     # lint, type check, test, cek drift schema
+make setup     # sekali saja: dependency Python + Node
+make dev       # jalankan semuanya
 ```
+
+`make dev` menyalakan database, menerapkan migrasi, mendaftarkan kapal simulasi
+beserta kredensialnya, lalu menjalankan central + Edge Agent + dashboard dengan
+log berlabel di satu terminal. Ctrl-C menghentikan semuanya dengan rapi.
+
+```
+Dashboard  http://localhost:5173   masuk: operator / bima2005
+Console    http://localhost:8080
+API docs   http://localhost:8000/docs
+```
+
+Rinciannya, termasuk cara menjalankan sebagian saja:
+[Cara Menjalankan](docs/operations/00-menjalankan.md).
 
 ## Struktur
 
@@ -57,18 +75,19 @@ Tiap folder sistem punya README-nya sendiri:
 Bukan microservice. Dashboard bukan proses aplikasi — hasil `vite build`, disajikan
 sebagai file statis.
 
-## Menjalankan
+## Menjalankan sebagian
 
 ```bash
-# Edge Agent (Console di http://127.0.0.1:8080)
-uv run fleetview-edge --config edge/agent/config/edge.example.yaml
-
-# Central API (docs di http://localhost:8000/docs saat development)
-uv run fleetview-central
-
-# Dashboard
-pnpm --filter @fleetview/central-web dev
+make dev-central   # central saja
+make dev-ship      # kapal simulasi saja (butuh central hidup)
+make dev-status    # apa yang sedang jalan
+make dev-reset     # hapus data kapal simulasi, di kedua sisi
 ```
+
+Kalau menjalankan Edge Agent secara manual, pakai `edge.dev.yaml`, **bukan**
+`edge.example.yaml`. Yang kedua adalah template produksi: adapter `lp_a104`
+sengaja gagal keras karena jalur bacanya belum terkonfirmasi, dan
+`environment: production` menolak start bila config belum lengkap.
 
 ## Perintah
 
@@ -84,6 +103,14 @@ pnpm --filter @fleetview/central-web dev
 ## Dokumentasi
 
 Mulai dari [docs/README.md](docs/README.md).
+
+| Kebutuhan | Dokumen |
+|---|---|
+| Menjalankan sistem | [Cara menjalankan](docs/operations/00-menjalankan.md) |
+| **Memasang kapal baru (alur lengkap)** | **[Onboarding kapal](docs/operations/07-ship-onboarding.md)** |
+| Memasang di Raspberry Pi | [Provisioning](docs/operations/02-provisioning-raspberry-pi.md) |
+| Memasang server pusat | [Deployment central](docs/operations/03-central-deployment.md) |
+| Ada yang tidak beres | [Troubleshooting](docs/operations/09-troubleshooting.md) |
 
 Dua hal yang paling perlu diketahui sebelum menyentuh kode:
 

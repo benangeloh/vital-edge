@@ -140,4 +140,9 @@ def create_app(settings: ApiSettings | None = None) -> FastAPI:
     app.include_router(telemetry_router.router)
     app.include_router(ops_router.router)
 
+    # Config dilekatkan di sini, bukan di dalam lifespan: ia bukan resource yang
+    # perlu dibuka dan ditutup, dan sebagian test membangun app tanpa menjalankan
+    # lifespan sama sekali.
+    app.state.settings = settings
+
     return app

@@ -18,6 +18,10 @@ dist/
 # Env & secrets — jangan pernah di-commit
 .env
 .env.*
+
+# Data kapal simulasi saat menjalankan di komputer sendiri
+# (docs/operations/00-menjalankan.md bagian A)
+.devdata/
 !.env.example
 *.pem
 *.key

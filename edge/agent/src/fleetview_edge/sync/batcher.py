@@ -44,14 +44,14 @@ def decode_payload(payload: bytes) -> list[Reading]:
 
 
 class BuiltBatch:
-    """Batch yang siap dikirim: envelope, payload, dan baris asalnya."""
+    """Batch yang siap dikirim: envelope, payload, dan chunk asalnya."""
 
-    __slots__ = ("envelope", "payload", "sequences")
+    __slots__ = ("chunk_starts", "envelope", "payload")
 
-    def __init__(self, envelope: BatchEnvelope, payload: bytes, sequences: list[int]) -> None:
+    def __init__(self, envelope: BatchEnvelope, payload: bytes, chunk_starts: list[int]) -> None:
         self.envelope = envelope
         self.payload = payload
-        self.sequences = sequences
+        self.chunk_starts = chunk_starts
 
 
 class Batcher:
@@ -85,32 +85,40 @@ class Batcher:
 
         Mengembalikan None bila tidak ada yang pending.
         """
-        rows = self._store.claim_contiguous_run(limit=self._max_records, max_priority=max_priority)
-        if not rows:
+        chunks = self._store.claim_contiguous_run(
+            limit=self._max_records, max_priority=max_priority
+        )
+        if not chunks:
             return None
 
         # Kecilkan sampai muat batas byte. Dilakukan setelah kompresi karena
         # rasio kompresi telemetry sangat bergantung isinya — menebak dari
         # jumlah record akan meleset jauh.
-        while rows:
-            readings = [r.record.to_reading() for r in rows]
-            payload = encode_payload(readings)
-            if len(payload) <= self._max_bytes or len(rows) == 1:
+        #
+        # Pengecilan membuang chunk utuh, tidak pernah memotong di tengah chunk:
+        # state melekat pada chunk, jadi membatch separuh chunk akan menandai
+        # seluruhnya terkirim padahal sebagiannya tidak.
+        while chunks:
+            records = [r for c in chunks for r in c.records]
+            payload = encode_payload([r.to_reading() for r in records])
+            if len(payload) <= self._max_bytes or len(chunks) == 1:
                 break
-            rows = rows[: len(rows) // 2]
+            chunks = chunks[: len(chunks) // 2]
 
-        first, last = rows[0], rows[-1]
+        first_seq = chunks[0].sequence_start
+        last_seq = chunks[-1].sequence_end
+        priority = chunks[0].priority
         batch_id = uuid7()
         envelope = BatchEnvelope(
             schema_version=SCHEMA_VERSION,
             batch_id=batch_id,
-            ship_id=first.record.ship_id,
-            device_id=first.record.device_id,
-            sequence_start=first.sequence,
-            sequence_end=last.sequence,
-            first_timestamp=from_micros(min(r.record.timestamp for r in rows)),
-            last_timestamp=from_micros(max(r.record.timestamp for r in rows)),
-            record_count=len(rows),
+            ship_id=records[0].ship_id,
+            device_id=records[0].device_id,
+            sequence_start=first_seq,
+            sequence_end=last_seq,
+            first_timestamp=from_micros(min(r.timestamp for r in records)),
+            last_timestamp=from_micros(max(r.timestamp for r in records)),
+            record_count=len(records),
             payload_checksum=checksum_of(payload),
             payload_encoding=PAYLOAD_ENCODING,
             payload_size=len(payload),
@@ -119,33 +127,34 @@ class Batcher:
             created_at=now_utc(),
         )
 
-        sequences = [r.sequence for r in rows]
+        chunk_starts = [c.sequence_start for c in chunks]
         self._store.create_batch(
             BatchRow(
                 batch_id=str(batch_id),
-                sequence_start=first.sequence,
-                sequence_end=last.sequence,
-                first_timestamp=min(r.record.timestamp for r in rows),
-                last_timestamp=max(r.record.timestamp for r in rows),
-                record_count=len(rows),
+                sequence_start=first_seq,
+                sequence_end=last_seq,
+                first_timestamp=min(r.timestamp for r in records),
+                last_timestamp=max(r.timestamp for r in records),
+                record_count=len(records),
                 payload_checksum=envelope.payload_checksum,
                 schema_version=SCHEMA_VERSION,
-                priority=first.priority,
+                priority=priority,
                 state=BatchState.BUILT,
             ),
-            sequences,
+            chunk_starts,
         )
 
         log.info(
             "sync.batch_built",
             batch_id=str(batch_id),
-            records=len(rows),
+            records=len(records),
+            chunks=len(chunks),
             bytes=len(payload),
-            priority=int(first.priority),
-            sequence_start=first.sequence,
-            sequence_end=last.sequence,
+            priority=int(priority),
+            sequence_start=first_seq,
+            sequence_end=last_seq,
         )
-        return BuiltBatch(envelope, payload, sequences)
+        return BuiltBatch(envelope, payload, chunk_starts)
 
     def rebuild(self, batch_id: str) -> BuiltBatch | None:
         """Susun ulang batch yang sudah ada dari outbox, untuk percobaan ulang.
@@ -179,4 +188,4 @@ class Batcher:
             config_version=self._config_version,
             created_at=now_utc(),
         )
-        return BuiltBatch(envelope, payload, [r.sequence_number for r in records])
+        return BuiltBatch(envelope, payload, [])

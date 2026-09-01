@@ -1,0 +1,59 @@
+# Konfigurasi Edge Agent untuk MENCOBA DI KOMPUTER SENDIRI.
+#
+# Bukan untuk kapal. Bedanya dengan edge.example.yaml:
+#   - adapter simulator, bukan lp_a104 (yang sengaja gagal keras)
+#   - environment development, sehingga pemeriksaan kelengkapan produksi tidak
+#     dijalankan dan rahasia boleh ditulis di sini
+#   - menunjuk stack `make up` di localhost
+#
+# Jalankan:  uv run fleetview-edge --config edge/agent/config/edge.dev.yaml
+# Lihat:     http://127.0.0.1:8080
+
+environment: development
+log_level: INFO
+log_format: console       # terbaca manusia; produksi memakai json
+config_version: "dev"
+
+ship:
+  # UUID tetap, bukan acak: dipakai juga saat mendaftarkan kapal ini di central
+  # lewat `fleetview-admin`, dan harus sama di kedua sisi.
+  ship_id: "11111111-1111-1111-1111-111111111111"
+  ship_name: "KM Simulasi Dev"
+  device_id: "22222222-2222-2222-2222-222222222222"
+
+collector:
+  adapter: simulator
+  sensors_path: edge/agent/config/sensors.example.yaml
+  poll_interval_seconds: 1.0
+  poll_timeout_seconds: 5.0
+  clock_jump_threshold_seconds: 2.0
+  backoff_initial_seconds: 1.0
+  backoff_max_seconds: 60.0
+
+storage:
+  data_dir: .devdata
+  outbox_path: .devdata/outbox.db
+  influx_url: http://127.0.0.1:8086
+  influx_org: fleetview
+  influx_bucket: telemetry
+  influx_token: fleetview-dev-token    # token stack dev; aman ditulis di sini
+  influx_timeout_seconds: 10.0
+  retention_days: 90
+  acked_grace_days: 7
+  buffer_max_records: 10000
+  buffer_retry_batch_size: 500
+  disk_warn_percent: 80.0
+  disk_critical_percent: 90.0
+
+sync:
+  central_url: "http://127.0.0.1:8000"
+  batch_max_records: 500
+  batch_max_bytes: 1048576
+  batch_max_age_seconds: 10       # lebih pendek dari produksi supaya cepat terlihat
+  heartbeat_interval_seconds: 60
+  cellular_monthly_budget_mb: 500
+
+console:
+  enabled: true
+  host: 127.0.0.1
+  port: 8080

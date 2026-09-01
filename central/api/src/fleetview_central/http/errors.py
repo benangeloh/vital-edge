@@ -13,6 +13,14 @@ __all__ = ["register_error_handlers"]
 
 log = get_logger(__name__)
 
+#: Kode yang menandakan "sudah terautentikasi, tetapi tidak berhak".
+#:
+#: Dipisahkan dari 401 dengan sengaja. Dashboard menghapus sesi pada 401 apa pun
+#: — itu benar untuk token kedaluwarsa, tetapi salah untuk kekurangan peran:
+#: operator yang menekan tombol yang bukan haknya akan terlempar keluar alih-alih
+#: diberi tahu. 403 membuat kedua keadaan itu bisa dibedakan klien.
+_FORBIDDEN_CODES = frozenset({"auth.forbidden"})
+
 _STATUS_BY_TYPE: dict[type[FleetViewError], int] = {
     AuthError: 401,
     ConfigError: 500,
@@ -28,6 +36,8 @@ def _status_for(exc: FleetViewError) -> int:
     membuat batch yang rusak permanen diulang selamanya — atau sebaliknya,
     membuat kegagalan sementara dianggap fatal.
     """
+    if exc.code in _FORBIDDEN_CODES:
+        return 403
     for exc_type, status in _STATUS_BY_TYPE.items():
         if isinstance(exc, exc_type):
             return status
