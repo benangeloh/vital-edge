@@ -252,9 +252,20 @@ class EdgeRuntime:
                 self.collector.stop()
             if self.sync is not None:
                 self.sync.stop()
-            for task in tasks:
+            # Beri kesempatan berhenti sendiri lebih dulu, baru dibatalkan.
+            #
+            # Membatalkan langsung membuat komponen berhenti di tengah jalan:
+            # uvicorn mencatat CancelledError beserta traceback pada level ERROR
+            # padahal penghentiannya normal, dan bagian "Kesalahan terakhir" di
+            # fleetview-status jadi selalu berisi sesuatu — melatih teknisi
+            # mengabaikan bagian yang justru paling perlu dibaca.
+            #
+            # Batas waktunya pendek: penghentian yang berlarut sama buruknya,
+            # karena systemd akan membunuh paksa setelah TimeoutStopSec.
+            _selesai, tertinggal = await asyncio.wait(tasks, timeout=5.0)
+            for task in tertinggal:
                 task.cancel()
-            for task in tasks:
+            for task in tertinggal:
                 with contextlib.suppress(asyncio.CancelledError, Exception):
                     await task
             if self.outbox is not None:
