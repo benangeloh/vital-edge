@@ -43,6 +43,8 @@ dibuat dengan nilai ini bahkan kalau ada yang mencobanya.
 """
 
 ENV_FILE = Path(".devdata/dev.env")
+SENSORS_FILE = Path(".devdata/sensors.yaml")
+SENSORS_TEMPLATE = Path("edge/agent/config/sensors.example.yaml")
 
 
 async def main() -> int:
@@ -109,6 +111,21 @@ async def main() -> int:
         f"FLEETVIEW_SYNC__DEVICE_SECRET={secret}\n"
     )
     ENV_FILE.chmod(0o600)
+
+    # Disalin, bukan dipakai langsung dari sumbernya. edge.dev.yaml menunjuk ke
+    # SENSORS_FILE, dan halaman Sensor di Console MENULIS ke berkas itu lewat
+    # upsert_sensor() — kalau agent menunjuk langsung ke berkas contoh yang
+    # dilacak git, mencoba fitur kelola-sensor di `make dev` diam-diam menimpa
+    # dokumentasi acuan untuk semua orang yang memakai repo ini.
+    #
+    # Hanya disalin kalau belum ada: dev_seed.py dipanggil setiap `make dev`,
+    # dan menimpa ulang akan membuang sensor yang baru saja ditambahkan lewat
+    # Console di sesi sebelumnya.
+    if not SENSORS_FILE.exists():
+        SENSORS_FILE.parent.mkdir(parents=True, exist_ok=True)
+        SENSORS_FILE.write_text(SENSORS_TEMPLATE.read_text())
+        print(f"  {SENSORS_FILE} disiapkan dari contoh")
+
     return 0
 
 

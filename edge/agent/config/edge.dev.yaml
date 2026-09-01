@@ -23,7 +23,12 @@ ship:
 
 collector:
   adapter: simulator
-  sensors_path: edge/agent/config/sensors.example.yaml
+  # BUKAN edge/agent/config/sensors.example.yaml langsung. Halaman Sensor di
+  # Console menulis ke berkas ini lewat upsert_sensor() — kalau sensors_path
+  # menunjuk ke berkas contoh yang dilacak git, mencoba fitur itu di `make dev`
+  # menimpa dokumentasi acuan. .devdata/ sudah di-gitignore dan disalin sekali
+  # oleh dev_seed.py; sunting sepuasnya di sana.
+  sensors_path: .devdata/sensors.yaml
   poll_interval_seconds: 1.0
   poll_timeout_seconds: 5.0
   clock_jump_threshold_seconds: 2.0
