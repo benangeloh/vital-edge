@@ -96,14 +96,33 @@ systemctl enable --now influxdb >/dev/null 2>&1 || true
 
 # Tunggu InfluxDB siap. Port terbuka tidak berarti siap menerima perintah, dan
 # setup yang dijalankan terlalu dini gagal dengan pesan yang menyesatkan.
+INFLUX_SIAP=""
 for _ in $(seq 1 60); do
-  curl -sf http://127.0.0.1:8086/health >/dev/null 2>&1 && break
+  if curl -sf http://127.0.0.1:8086/health >/dev/null 2>&1; then
+    INFLUX_SIAP="ya"
+    break
+  fi
   sleep 1
 done
+if [[ -z "${INFLUX_SIAP}" ]]; then
+  echo "PERINGATAN: InfluxDB tidak merespons setelah 60 detik." >&2
+  echo "  Penulisan lokal akan ditolak. Sinkronisasi ke pusat TIDAK terpengaruh." >&2
+  echo "  Periksa: systemctl status influxdb" >&2
+fi
 
 INFLUX_TOKEN_FILE="${CONFIG_DIR}/influx.token"
 INFLUX_PASSWORD_FILE="${CONFIG_DIR}/influx-admin.password"
-if [[ ! -s "${INFLUX_TOKEN_FILE}" ]]; then
+# `allowed: true` berarti InfluxDB belum pernah di-setup. Ini yang membedakan
+# "sudah disiapkan sebelumnya" dari "tidak bisa dihubungi" — dua keadaan yang
+# tindakannya berlawanan, dan menyamakannya membuat pemasangan yang rusak
+# terlihat seperti pemasangan ulang yang wajar.
+INFLUX_PERLU_SETUP=""
+if [[ -n "${INFLUX_SIAP}" ]] \
+   && curl -sf http://127.0.0.1:8086/api/v2/setup 2>/dev/null | grep -q '"allowed": *true'; then
+  INFLUX_PERLU_SETUP="ya"
+fi
+
+if [[ -n "${INFLUX_SIAP}" && ! -s "${INFLUX_TOKEN_FILE}" ]]; then
   # Kata sandi admin tidak pernah dipakai lagi setelah ini; yang dipakai agent
   # hanya tokennya. Karena itu ia dibuat acak dan tidak disimpan di mana pun.
   # Kata sandi admin dibuat acak lalu DISIMPAN, tidak dibuang.
@@ -132,8 +151,12 @@ if [[ ! -s "${INFLUX_TOKEN_FILE}" ]]; then
     printf '%s\n' "${INFLUX_PASSWORD}" > "${INFLUX_PASSWORD_FILE}"
     chmod 0640 "${INFLUX_PASSWORD_FILE}"
     chown root:fleetview "${INFLUX_PASSWORD_FILE}" 2>/dev/null || true
-  else
+  elif [[ -z "${INFLUX_PERLU_SETUP}" ]]; then
     echo "==> InfluxDB sudah disiapkan sebelumnya; kata sandi lama tetap berlaku"
+  else
+    echo "PERINGATAN: InfluxDB belum di-setup dan percobaan setup gagal." >&2
+    echo "  Coba manual: influx setup --username fleetview --org fleetview \\" >&2
+    echo "                 --bucket telemetry --retention 90d" >&2
   fi
   # Token diambil dari config CLI, lalu disimpan dengan izin ketat.
   if token="$(influx auth list --json 2>/dev/null | sed -n 's/.*"token": *"\([^"]*\)".*/\1/p' | head -1)"; then
