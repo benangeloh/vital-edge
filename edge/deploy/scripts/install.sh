@@ -12,6 +12,25 @@ SRC="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 
 [[ $EUID -eq 0 ]] || { echo "jalankan sebagai root" >&2; exit 1; }
 
+# --- prasyarat --------------------------------------------------------------
+#
+# Dipasang di sini, bukan diasumsikan ada. Raspberry Pi OS Lite yang baru tidak
+# membawa git, python3-venv, maupun sqlite3 — dan skrip yang gagal di tengah
+# karena satu perintah tidak ada adalah pengalaman pertama yang buruk untuk
+# teknisi yang baru memasang perangkat.
+KURANG=()
+command -v git      >/dev/null 2>&1 || KURANG+=(git)
+command -v curl     >/dev/null 2>&1 || KURANG+=(curl)
+command -v gpg      >/dev/null 2>&1 || KURANG+=(gnupg)
+command -v sqlite3  >/dev/null 2>&1 || KURANG+=(sqlite3)
+command -v openssl  >/dev/null 2>&1 || KURANG+=(openssl)
+python3 -c "import venv" >/dev/null 2>&1 || KURANG+=(python3-venv)
+if (( ${#KURANG[@]} )); then
+  echo "==> memasang prasyarat: ${KURANG[*]}"
+  apt-get update -qq
+  apt-get install -y -qq "${KURANG[@]}"
+fi
+
 id -u fleetview >/dev/null 2>&1 || useradd --system --home "${DATA_DIR}" --shell /usr/sbin/nologin fleetview
 # dialout diperlukan untuk membaca port serial LP-A104.
 usermod -aG dialout fleetview

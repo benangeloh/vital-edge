@@ -130,32 +130,34 @@ kegagalan yang paling merugikan karena terjadi diam-diam.
 
 ## 5. Pasang Edge Agent
 
-Repo ini berisi **dua sistem yang dideploy terpisah**. Kapal hanya butuh
-`shared/` dan `edge/`; `central/` — API pusat dan dashboard — tidak pernah
-dipasang maupun dijalankan di sini.
+Repo ini berisi **dua sistem yang dideploy terpisah**, tetapi seluruhnya hanya
+3,3 MB — kode central di dalamnya cuma 508 KB dan tidak pernah dipasang. Jadi
+untuk perangkat baru, clone biasa sudah paling sederhana:
 
 ```bash
-sudo apt-get install -y git
 sudo mkdir -p /opt/fleetview
 sudo git clone --depth 1 --branch <tag rilis> <url-repo> /opt/fleetview/src
 sudo /opt/fleetview/src/edge/deploy/scripts/install.sh
 ```
 
-Clone penuh **aman**: `install.sh` hanya menyalin `edge/`, `shared/`, `docs/`,
-dan `pyproject.toml` ke direktori rilis, lalu memasang empat paket edge saja.
-Kode central ikut ter-clone tetapi tidak pernah dipasang, tidak pernah dijalankan,
-dan tidak masuk `PATH`.
+`install.sh` memasang prasyaratnya sendiri (`git`, `python3-venv`, `sqlite3`,
+`gnupg`) dan InfluxDB, membuat config awal, lalu menjalankan agent. Ia hanya
+menyalin `edge/`, `shared/`, `docs/`, dan `pyproject.toml` ke direktori rilis —
+kode central ikut ter-clone tetapi tidak pernah dipasang, tidak pernah
+dijalankan, dan tidak masuk `PATH`.
 
-Kalau ingin kode central sama sekali tidak mendarat di perangkat — lebih rapi
-untuk teknisi yang membuka Pi, dan `node_modules` dashboard tidak ikut tersalin:
+<details>
+<summary>Kalau ingin kode central sama sekali tidak mendarat di perangkat</summary>
 
 ```bash
 sudo /opt/fleetview/src/edge/deploy/scripts/clone-edge.sh <url-repo> <tag rilis>
 ```
 
-Skrip itu memakai sparse checkout, jadi hanya `shared/`, `edge/`, dan `docs/`
-yang diambil. `docs/` sengaja ikut: kapal tidak punya internet, dan panduan
-troubleshooting justru paling dibutuhkan di tempat ia tidak bisa diunduh.
+Sparse checkout, hanya `shared/`, `edge/`, `docs/`. Penghematannya kecil —
+sekitar 700 KB — jadi ini soal kerapian, bukan ukuran. Perlu diketahui: skrip
+ini ada **di dalam** repo, jadi tidak bisa dipakai untuk clone pertama; ia
+berguna untuk memutakhirkan perangkat yang sudah terpasang.
+</details>
 
 **Kenapa tetap satu repo dan bukan dua.** `shared/contracts` harus identik di
 kedua sisi. Kalau dipisah menjadi dua repo, format wire bisa menyimpang tanpa ada
