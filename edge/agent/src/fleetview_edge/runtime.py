@@ -312,6 +312,15 @@ class EdgeRuntime:
                 await asyncio.wait_for(self._stopping.wait(), timeout=interval)
 
     async def _serve_console(self) -> None:
+        """Layani Console sampai agent diminta berhenti.
+
+        Uvicorn dihentikan lewat `should_exit`, bukan dengan membatalkan task-nya.
+        Membatalkan membuat starlette mencatat CancelledError beserta traceback
+        pada level ERROR — padahal itu penghentian yang normal. Traceback yang
+        muncul tiap kali restart membuat bagian "Kesalahan terakhir" di
+        fleetview-status selalu berisi sesuatu, dan itu melatih teknisi
+        mengabaikan bagian yang justru paling perlu dibaca.
+        """
         assert self.console is not None
         config = uvicorn.Config(
             self.console,
@@ -319,7 +328,12 @@ class EdgeRuntime:
             port=self.settings.console.port,
             log_config=None,
         )
-        await uvicorn.Server(config).serve()
+        server = uvicorn.Server(config)
+        melayani = asyncio.create_task(server.serve(), name="console-serve")
+        await self._stopping.wait()
+        server.should_exit = True
+        with contextlib.suppress(asyncio.CancelledError, Exception):
+            await asyncio.wait_for(melayani, timeout=10.0)
 
     def stop(self) -> None:
         self._stopping.set()
