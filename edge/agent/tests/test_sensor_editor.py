@@ -167,3 +167,59 @@ class TestMembaca:
 
     def test_berkas_belum_ada_mengembalikan_kosong(self, tmp_path: Path) -> None:
         assert read_sensors(tmp_path / "belum-ada.yaml") == []
+
+
+class TestBarisLadder:
+    """Jembatan antara dashboard dan panel.
+
+    Nilai sensor hidup di area D milik PLC dan tidak diekspos ke Ethernet, jadi
+    tiap sensor menuntut satu baris salin di program panel. Baris itu tidak bisa
+    dibuat dari FleetView — yang bisa dilakukan adalah memberitahukannya persis,
+    supaya teknisi menyalin alih-alih menebak alamat.
+    """
+
+    def test_menyusun_baris_salin(self, tmp_path: Path) -> None:
+        from fleetview_edge.config.sensor_editor import ladder_lines
+
+        path = tmp_path / "sensors.yaml"
+        upsert_sensor(path, _entry(channel="UW50", panel_source="D00160"))
+        hasil = ladder_lines(read_sensors(path))
+        assert "MOV   D00160   UW00050" in hasil
+        assert "LOAD  M000020" in hasil
+        assert "; me_port_rpm" in hasil
+
+    def test_uw_diberi_padding_seperti_atlogic(self, tmp_path: Path) -> None:
+        """atLogic menulis UW00050, bukan UW50. Bentuk yang tidak cocok membuat
+        teknisi ragu apakah ia menyalin hal yang benar."""
+        from fleetview_edge.config.sensor_editor import ladder_lines
+
+        path = tmp_path / "sensors.yaml"
+        upsert_sensor(path, _entry(channel="UW7", panel_source="D00108"))
+        assert "UW00007" in ladder_lines(read_sensors(path))
+
+    def test_sensor_tanpa_alamat_sumber_disebutkan(self, tmp_path: Path) -> None:
+        """Diam-diam melewatinya akan membuat teknisi men-download ladder yang
+        kurang satu baris, lalu bingung kenapa satu sensor tetap nol."""
+        from fleetview_edge.config.sensor_editor import ladder_lines
+
+        path = tmp_path / "sensors.yaml"
+        upsert_sensor(path, _entry(channel="UW50", panel_source="D00160"))
+        upsert_sensor(path, _entry(sensor_id="fuel_level", channel="UW51", metric="level"))
+        hasil = ladder_lines(read_sensors(path))
+        assert "fuel_level" in hasil
+        assert "belum diisi" in hasil
+
+    def test_urut_menurut_alamat_tujuan(self, tmp_path: Path) -> None:
+        """Blok yang urut mudah dicocokkan dengan layar atLogic saat diperiksa."""
+        from fleetview_edge.config.sensor_editor import ladder_lines
+
+        path = tmp_path / "sensors.yaml"
+        upsert_sensor(path, _entry(sensor_id="c", channel="UW52", panel_source="D00110"))
+        upsert_sensor(path, _entry(sensor_id="a", channel="UW50", panel_source="D00160"))
+        hasil = ladder_lines(read_sensors(path))
+        assert hasil.index("UW00050") < hasil.index("UW00052")
+
+    def test_kosong_bila_belum_ada_sensor(self) -> None:
+        from fleetview_edge.config.sensor_editor import ladder_lines
+
+        assert ladder_lines([]) == ""

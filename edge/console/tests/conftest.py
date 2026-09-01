@@ -41,6 +41,8 @@ class FakeContext:
         configured: bool = True,
         pin: str = "123456",
         adapter: str = "lp_a104",
+        influx_token: str = "rahasia-token-influx",
+        sandi: str | None = "sandi-admin-influx",
     ) -> None:
         self.fail = fail or set()
         self.empty = empty
@@ -49,10 +51,41 @@ class FakeContext:
         self._configured = configured
         self._pin = pin
         self._adapter = adapter
+        self._influx_token = influx_token
+        self._sandi = sandi
         self._registry: list[dict[str, Any]] = [
             {"sensor_id": "me_port_rpm", "channel": "UW100", "metric": "rpm", "unit": "rpm"}
         ]
         self.provisioned: list[dict[str, Any]] = []
+
+    # -- penyimpanan lokal --------------------------------------------------
+
+    async def storage_detail(self) -> dict[str, Any]:
+        self._guard("storage_detail")
+        return {
+            "url": "http://127.0.0.1:8086",
+            "org": "fleetview",
+            "bucket": "telemetry",
+            "retention_days": 90,
+            "username": "fleetview",
+            "sandi_tersimpan": self._sandi is not None,
+            "sandi_path": "/etc/fleetview/influx-admin.password",
+            "token_terpasang": bool(self._influx_token),
+            "terjangkau": True,
+            "ditulis": 1234,
+            "ditolak": 0,
+            "tersangga": 0,
+        }
+
+    def storage_password(self, pin: str) -> str:
+        self._guard("storage_password")
+        from fleetview_common import ConfigError
+
+        if pin.strip() != self._pin:
+            raise ConfigError("PIN salah.", code="storage.pin_invalid")
+        if self._sandi is None:
+            raise ConfigError("kata sandi tidak tersimpan", code="storage.password_not_stored")
+        return self._sandi
 
     # -- registry sensor ----------------------------------------------------
 

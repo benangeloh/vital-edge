@@ -127,23 +127,38 @@ class TestLPA104AdapterKerangka:
     yang sensornya mati — kondisi yang paling tidak boleh disamarkan.
     """
 
-    async def test_connect_melempar_not_implemented(self) -> None:
-        with pytest.raises(ProtocolError, match="belum diimplementasikan"):
-            await LPA104Adapter().connect()
+    async def test_host_kosong_ditolak_saat_dibuat(self) -> None:
+        """Panel tanpa alamat tidak punya perilaku yang masuk akal. Ditolak saat
+        dibuat, bukan saat polling pertama gagal di tengah laut."""
+        with pytest.raises(ProtocolError, match="host"):
+            LPA104Adapter(host="")
 
-    async def test_read_points_melempar_not_implemented(self) -> None:
-        with pytest.raises(ProtocolError, match="belum diimplementasikan"):
-            await LPA104Adapter().read_points()
+    async def test_channel_kosong_bukan_pembacaan_sukses(self) -> None:
+        """Registry kosong akan membuat kapal terlihat persis seperti kapal yang
+        sehat tetapi sensornya mati — keadaan yang paling tidak boleh disamarkan."""
+        adapter = LPA104Adapter(host="127.0.0.1", channels=[])
+        with pytest.raises(ProtocolError, match="tidak ada channel"):
+            await adapter.read_points()
 
-    async def test_tidak_retryable(self) -> None:
-        """Ini bukan kegagalan sementara — mengulang tidak akan menolong."""
-        with pytest.raises(ProtocolError) as exc:
-            await LPA104Adapter().connect()
-        assert exc.value.retryable is False
+    @pytest.mark.parametrize("channel", ["UW50", "uw0050", "UW128999"])
+    def test_channel_uw_diurai_jadi_nomor_register(self, channel: str) -> None:
+        """UW000nn <-> register Modbus nn, dipastikan lewat rung 26 ladder
+        (`MOV H0002 UW00020`) yang memang terbaca 2 di register 20."""
+        from fleetview_edge.protocol.lp_a104.adapter import parse_uw_channel
 
-    async def test_health_tetap_menjawab_dan_menjelaskan(self) -> None:
+        assert parse_uw_channel(channel) == int(channel[2:])
+
+    @pytest.mark.parametrize("channel", ["40001", "D160", "UW999999"])
+    def test_channel_asing_ditolak(self, channel: str) -> None:
+        """D160 khususnya: itu alamat area D milik PLC, BUKAN alamat Modbus.
+        Membacanya lewat Ethernet selalu mengembalikan nol."""
+        from fleetview_edge.protocol.lp_a104.adapter import parse_uw_channel
+
+        with pytest.raises(ProtocolError):
+            parse_uw_channel(channel)
+
+    async def test_health_tetap_menjawab_sebelum_terhubung(self) -> None:
         """health() tidak boleh melempar, justru saat keadaan buruk."""
-        health = await LPA104Adapter().health()
+        health = await LPA104Adapter(host="192.168.100.101", channels=["UW50"]).health()
         assert health.link is LinkState.DISCONNECTED
-        assert health.detail is not None
-        assert "belum diimplementasikan" in health.detail
+        assert health.detail is not None and "192.168.100.101" in health.detail

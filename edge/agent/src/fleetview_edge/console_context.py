@@ -8,6 +8,7 @@ penyimpanan, dan tanpa jaringan.
 from __future__ import annotations
 
 import contextlib
+import secrets
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
@@ -24,7 +25,12 @@ from fleetview_console import (
     redact_config,
 )
 from fleetview_edge.collector import Collector
-from fleetview_edge.config.sensor_editor import delete_sensor, read_sensors, upsert_sensor
+from fleetview_edge.config.sensor_editor import (
+    delete_sensor,
+    ladder_lines,
+    read_sensors,
+    upsert_sensor,
+)
 from fleetview_edge.provisioning import provision, setup_pin
 from fleetview_edge.settings import EdgeSettings
 from fleetview_edge.storage import StorageWriter
@@ -64,6 +70,71 @@ class AgentConsoleContext:
         self._config_path = config_path
         self._on_provisioned = on_provisioned
 
+    # -- penyimpanan lokal --------------------------------------------------
+
+    async def storage_detail(self) -> dict[str, Any]:
+        """Rincian InfluxDB lokal, untuk dipastikan teknisi tanpa membuka terminal.
+
+        Tidak pernah memuat token — hanya apakah ia sudah terpasang. Halaman ini
+        dibuka di kapal, sering di layar yang bisa dilihat orang lain.
+        """
+        cfg = self._settings.storage
+        sandi = (
+            self._settings.config_path.parent / "influx-admin.password"
+            if (self._settings.config_path)
+            else None
+        )
+        detail: dict[str, Any] = {
+            "url": cfg.influx_url,
+            "org": cfg.influx_org,
+            "bucket": cfg.influx_bucket,
+            "username": cfg.influx_username,
+            "sandi_tersimpan": bool(sandi and sandi.exists()),
+            "sandi_path": str(sandi) if sandi else None,
+            "retention_days": cfg.retention_days,
+            "token_terpasang": bool(cfg.influx_token),
+            "terjangkau": None,
+            "ditulis": None,
+            "ditolak": None,
+            "tersangga": None,
+        }
+        if self._storage is not None:
+            with contextlib.suppress(Exception):
+                health = await self._storage.health()
+                detail["terjangkau"] = health.healthy
+                detail["ditulis"] = self._storage.written
+                detail["ditolak"] = self._storage.rejected
+                detail["tersangga"] = health.buffered_records
+        return detail
+
+    def storage_password(self, pin: str) -> str:
+        """Kata sandi admin InfluxDB, di balik PIN perangkat.
+
+        Tidak ditampilkan begitu saja karena Edge Console tidak punya
+        autentikasi dan di kapal ia terbuka ke jaringan. Kata sandi ini memberi
+        kendali penuh atas penyimpanan telemetry kapal — termasuk menghapusnya.
+        PIN memastikan yang melihatnya adalah orang yang memang memegang
+        perangkat, bukan siapa saja yang bisa menjangkaunya lewat jaringan.
+        """
+        if not secrets.compare_digest(pin.strip(), self.setup_pin()):
+            raise ConfigError(
+                "PIN salah. Jalankan `sudo fleetview-status` di perangkat untuk melihatnya.",
+                code="storage.pin_invalid",
+            )
+        path = (
+            self._settings.config_path.parent / "influx-admin.password"
+            if self._settings.config_path
+            else None
+        )
+        if path is None or not path.exists():
+            raise ConfigError(
+                "kata sandi tidak tersimpan di perangkat ini — InfluxDB kemungkinan "
+                "disiapkan manual. Setel ulang dengan: influx user password --name "
+                f"{self._settings.storage.influx_username}",
+                code="storage.password_not_stored",
+            )
+        return path.read_text(encoding="utf-8").strip()
+
     # -- registry sensor ----------------------------------------------------
 
     def sensor_registry(self) -> dict[str, Any]:
@@ -74,11 +145,15 @@ class AgentConsoleContext:
         sekali pun, karena justru itu yang perlu diperbaiki.
         """
         path = self._settings.collector.sensors_path
+        entries = read_sensors(path) if path else []
         return {
             "adapter": self._settings.collector.adapter,
             "editable": path is not None,
             "path": str(path) if path else None,
-            "sensors": read_sensors(path) if path else [],
+            "sensors": entries,
+            "ladder": ladder_lines(entries)
+            if self._settings.collector.adapter == "lp_a104"
+            else "",
         }
 
     def save_sensor(self, entry: dict[str, Any]) -> str:

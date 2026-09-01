@@ -25,7 +25,12 @@ dist/
 !.env.example
 *.pem
 *.key
-docs/
+# Runbook operasional IKUT masuk repo: install.sh menyalinnya ke perangkat, dan
+# kapal tidak punya internet — panduan troubleshooting justru paling dibutuhkan
+# di tempat ia tidak bisa diunduh.
+#
+# Yang dikecualikan hanya manual PDF vendor (2,8 MB, bukan hasil kerja kita).
+docs/**/*.pdf
 
 # Data runtime edge
 *.db

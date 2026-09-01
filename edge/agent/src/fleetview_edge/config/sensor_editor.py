@@ -173,3 +173,50 @@ def delete_sensor(path: Path, sensor_id: str) -> bool:
     _write_atomic(path, sisa)
     log.info("sensor.dihapus", sensor_id=sensor_id, note="riwayat lama tetap tersimpan")
     return True
+
+
+#: Kontak pemicu yang dipakai blok salin di ladder.
+#:
+#: `M000020` dipilih karena rung 26 dan rung 32 pada program panel yang ada
+#: sudah memakainya sebagai penanda "inisialisasi selesai" — jadi blok salin
+#: ikut berjalan terus selama panel beroperasi, tanpa menambah kontak baru yang
+#: harus ikut dipelihara.
+LADDER_TRIGGER = "M000020"
+
+
+def ladder_lines(entries: list[dict[str, Any]]) -> str:
+    """Susun blok salin `D -> UW` untuk ditempel ke atLogic.
+
+    Ini jembatan antara dashboard dan panel. Nilai sensor hidup di area `D` milik
+    PLC dan **tidak** diekspos ke Ethernet; hanya area `UW` yang terbaca lewat
+    Modbus. Jadi tiap sensor menuntut satu baris salin di program panel — satu
+    hal yang tidak bisa dibuat dari FleetView, karena ia ada di dalam panel.
+
+    Yang bisa dilakukan: memberi tahu baris yang persis dibutuhkan, sehingga
+    teknisi menyalin alih-alih menebak alamat. Salah satu digit pada alamat
+    tujuan sudah cukup membuat sensor terbaca nol tanpa gejala lain.
+    """
+    baris: list[str] = []
+    tanpa_sumber: list[str] = []
+    for e in sorted(entries, key=lambda x: str(x.get("channel", ""))):
+        channel = str(e.get("channel", "")).upper()
+        if not channel.startswith("UW"):
+            continue
+        nama = str(e.get("sensor_id", "?"))
+        sumber = str(e.get("panel_source") or "").upper()
+        if not sumber:
+            tanpa_sumber.append(nama)
+            continue
+        # UW ditulis dengan padding 5 digit, mengikuti bentuk yang dipakai
+        # atLogic pada program panel yang ada (UW00050, bukan UW50).
+        tujuan = f"UW{int(channel[2:]):05d}"
+        baris.append(f"LOAD  {LADDER_TRIGGER}")
+        baris.append(f"MOV   {sumber:<8} {tujuan}      ; {nama}")
+
+    if not baris and not tanpa_sumber:
+        return ""
+    keluaran = "\n".join(baris)
+    if tanpa_sumber:
+        catatan = ", ".join(sorted(tanpa_sumber))
+        keluaran += f"\n\n; Belum bisa disusun — alamat sumber di panel belum diisi: {catatan}"
+    return keluaran

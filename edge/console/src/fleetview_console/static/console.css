@@ -283,3 +283,10 @@ body {
 .inline { display: inline; }
 .row-actions { display: flex; gap: 0.35rem; align-items: center; white-space: nowrap; }
 .tablewrap { overflow-x: auto; }
+
+.inline-form { display: inline-flex; gap: 0.4rem; align-items: center; }
+.field__input--pin { width: 9rem; }
+
+/* Blok ladder dibedakan: isinya untuk ditempel ke perangkat lain, bukan dibaca
+   sebagai status. */
+.card--ladder { border-left: 3px solid var(--green-primary); }

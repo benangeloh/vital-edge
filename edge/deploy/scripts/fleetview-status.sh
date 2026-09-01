@@ -19,7 +19,11 @@ if [ -t 1 ]; then
 else
   R=""; DIM=""; RED=""; GREEN=""; YEL=""
 fi
-head() { printf '\n%s\n' "${DIM}── $* ──────────────────────────────${R}"; }
+# Sengaja TIDAK dinamai `head`: nama itu menutupi utilitas `head`, dan setiap
+# pipa `| head -1` di dalam skrip ini akan diam-diam memanggil fungsi ini
+# sebagai gantinya. Gejalanya menyesatkan — nilai yang dibaca berubah menjadi
+# garis judul, dan kegagalannya muncul jauh dari sebabnya.
+judul() { printf '\n%s\n' "${DIM}── $* ──────────────────────────────${R}"; }
 good() { printf '  %sok%s   %s\n' "${GREEN}" "${R}" "$*"; }
 bad()  { printf '  %s!!%s   %s\n' "${RED}" "${R}" "$*"; }
 warn() { printf '  %s!%s    %s\n' "${YEL}" "${R}" "$*"; }
@@ -33,7 +37,7 @@ if [ -r "${OUTBOX}" ] && sqlite3 "${OUTBOX}" "SELECT 1;" >/dev/null 2>&1; then
   OUTBOX_READABLE="ya"
 fi
 
-head "Layanan"
+judul "Layanan"
 # Skrip ini juga kadang dijalankan di luar systemd — saat pengembangan, atau di
 # dalam kontainer. Tanpa penjaga ini, `systemctl: command not found` akan
 # terbaca seolah agent-nya yang bermasalah.
@@ -60,7 +64,7 @@ if [ -n "${HAS_SYSTEMD}" ]; then
     || warn "influxdb mati — akuisisi tetap jalan, penyimpanan lokal tertunda"
 fi
 
-head "Akuisisi"
+judul "Akuisisi"
 # Kemajuan diukur dari counter sequence di outbox, BUKAN dari StatusText systemd.
 #
 # StatusText hanya diperbarui saat heartbeat watchdog, yaitu tiap WatchdogSec/2 —
@@ -92,7 +96,7 @@ else
   fi
 fi
 
-head "Data belum tersetor"
+judul "Data belum tersetor"
 if [ -z "${OUTBOX_READABLE}" ]; then
   if [ "$(id -u)" -ne 0 ]; then
     warn "butuh akses outbox — jalankan: sudo fleetview-status"
@@ -110,12 +114,46 @@ else
   [ "${q:-0}" -gt 0 ] && bad "${q} batch dikarantina — lihat 09-troubleshooting.md"
 fi
 
-head "Disk"
+judul "Penyimpanan lokal (InfluxDB)"
+# Menjawab pertanyaan yang paling sering muncul saat memasang: "datanya
+# benar-benar tersimpan atau tidak?" Tanpa ini, jawabannya menuntut query Flux
+# yang tidak masuk akal untuk dihafal teknisi.
+if ! curl -sf -m 5 http://127.0.0.1:8086/health >/dev/null 2>&1; then
+  bad "InfluxDB tidak menjawab — pembacaan tidak tersimpan lokal"
+  warn "sinkronisasi ke pusat TIDAK terpengaruh; outbox tetap menampung"
+elif [ -r "${CONFIG_DIR:-/etc/fleetview}/agent.env" ]; then
+  INFLUX_TOKEN="$(sed -n 's/^FLEETVIEW_STORAGE__INFLUX_TOKEN=//p' \
+    "${CONFIG_DIR:-/etc/fleetview}/agent.env" | head -1)"
+  if [ -z "${INFLUX_TOKEN}" ]; then
+    bad "token InfluxDB belum disetel — setiap penulisan akan ditolak 401"
+  else
+    # Keluaran CSV InfluxDB memakai CRLF dan diawali dua kolom kosong, sehingga
+    # nilainya ada di kolom TERAKHIR — bukan pada nomor kolom tetap, yang
+    # berubah mengikuti bentuk query. Baris datanya dikenali dari awalan ",,".
+    titik="$(influx query --host http://127.0.0.1:8086 --token "${INFLUX_TOKEN}" \
+      --org "${FLEETVIEW_INFLUX_ORG:-fleetview}" --raw \
+      'from(bucket:"'"${FLEETVIEW_INFLUX_BUCKET:-telemetry}"'")
+         |> range(start:-10m)
+         |> filter(fn:(r) => r._field == "value")
+         |> count() |> group() |> sum()' 2>/dev/null \
+      | awk -F, '/^,,/ {gsub(/\r/, ""); nilai=$NF} END {print nilai+0}')"
+    if [ -n "${titik}" ] && [ "${titik}" -gt 0 ] 2>/dev/null; then
+      good "${titik} pembacaan tersimpan dalam 10 menit terakhir"
+    else
+      bad "tidak ada pembacaan tersimpan dalam 10 menit terakhir"
+      warn "periksa 'journalctl -u fleetview-agent | grep storage'"
+    fi
+  fi
+else
+  warn "butuh akses agent.env — jalankan dengan sudo"
+fi
+
+judul "Disk"
 df -Ph "${DATA_DIR}" 2>/dev/null | awk 'NR==2 {printf "  %s terpakai %s, sisa %s\n", $6, $5, $4}'
 mountpoint -q "${DATA_DIR}" 2>/dev/null \
   || warn "${DATA_DIR} bukan mount terpisah — pastikan bukan SD card"
 
-head "Setup"
+judul "Setup"
 PIN_FILE="${DATA_DIR}/setup.pin"
 if [ -f "${PIN_FILE}" ] && [ ! -f "${DATA_DIR}/outbox.db" ]; then
   if [ -r "${PIN_FILE}" ]; then
@@ -129,11 +167,11 @@ else
   good "perangkat sudah dikonfigurasi"
 fi
 
-head "Console"
+judul "Console"
 curl -sf -o /dev/null --max-time 3 "http://127.0.0.1:${CONSOLE_PORT}/" \
   && good "http://127.0.0.1:${CONSOLE_PORT}" || warn "Console tidak merespons"
 
-head "Kesalahan terakhir"
+judul "Kesalahan terakhir"
 journalctl -u fleetview-agent -o cat -n 300 --no-pager 2>/dev/null \
   | grep '"level": *"error"' | tail -3 | cut -c1-200 || printf '  (tidak ada)\n'
 printf '\n'

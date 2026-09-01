@@ -35,11 +35,24 @@ def test_setup_memasang_logging_dan_mencatat_identitas(
     """Baris identitas ini yang dibaca teknisi lebih dulu saat troubleshooting."""
     EdgeAgent(_settings(log_format="json")).setup()
 
-    line = json.loads(capsys.readouterr().err.strip().splitlines()[-1])
-    assert line["event"] == "edge_agent.configured"
-    assert line["ship_name"] == "KM Uji Coba"
-    assert line["service"] == "edge-agent"
-    assert line["version"] == AGENT_VERSION
+    baris = [json.loads(x) for x in capsys.readouterr().err.strip().splitlines()]
+    peristiwa = {b["event"]: b for b in baris}
+
+    identitas = peristiwa["edge_agent.configured"]
+    assert identitas["ship_name"] == "KM Uji Coba"
+    assert identitas["service"] == "edge-agent"
+    assert identitas["version"] == AGENT_VERSION
+
+    # Rincian penyimpanan dicatat selalu, bukan hanya saat gagal: pertanyaan
+    # pertama teknisi saat memasang adalah "ini nyimpen ke mana?", dan
+    # menjawabnya lewat berkas config berarti membuka terminal.
+    penyimpanan = peristiwa["edge_agent.penyimpanan_lokal"]
+    assert penyimpanan["bucket"]
+    assert penyimpanan["url"]
+    assert "influx_token" not in penyimpanan
+    assert all(
+        "token" not in str(v).lower() or k == "token_terpasang" for k, v in penyimpanan.items()
+    )
 
 
 def test_setup_gagal_cepat_saat_config_produksi_tidak_lengkap() -> None:
@@ -70,11 +83,18 @@ def test_build_adapter_menghormati_pilihan_config() -> None:
     assert isinstance(
         EdgeAgent(_settings(collector={"adapter": "mock"})).build_adapter(), MockLPAAdapter
     )
-    # lp_a104 tetap bisa dipilih meski belum jalan — gagal keras jauh lebih baik
-    # daripada diam-diam jatuh ke simulator dan mengirim data palsu.
-    assert isinstance(
-        EdgeAgent(_settings(collector={"adapter": "lp_a104"})).build_adapter(), LPA104Adapter
+    # lp_a104 kini membaca panel sungguhan lewat Modbus TCP. Alamat panelnya
+    # wajib ada — adapter menolak dibuat tanpa itu, supaya salah konfigurasi
+    # ketahuan saat start, bukan saat polling pertama gagal di tengah laut.
+    agent = EdgeAgent(
+        _settings(collector={"adapter": "lp_a104", "lp_a104_host": "192.168.100.101"})
     )
+    assert isinstance(agent.build_adapter(), LPA104Adapter)
+
+    from fleetview_common import ProtocolError
+
+    with pytest.raises(ProtocolError, match="host"):
+        EdgeAgent(_settings(collector={"adapter": "lp_a104"})).build_adapter()
 
 
 def test_build_collector_butuh_config_sensor() -> None:

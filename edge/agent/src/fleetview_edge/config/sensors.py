@@ -91,6 +91,20 @@ class SensorConfig(BaseModel):
     poll_interval_seconds: Annotated[float, Field(gt=0)] = 1.0
     enabled: bool = True
 
+    panel_source: Annotated[str | None, Field(max_length=32)] = None
+    """Alamat asal nilai ini di dalam program panel, mis. `D00160`.
+
+    Khusus LP-A104, dan **bukan** alamat yang dibaca agent — agent membaca
+    `channel` (area UW lewat Modbus). Yang ini dicatat karena nilai sensor hidup
+    di area `D` milik PLC, yang tidak diekspos ke Ethernet: harus ada satu baris
+    salin `MOV D UW` di ladder atLogic agar terbaca dari luar.
+
+    Menyimpannya di sini membuat Edge Console bisa menghasilkan baris ladder yang
+    persis dibutuhkan, sehingga teknisi menyalin alih-alih menebak alamat — dan
+    memungkinkan pemetaan panel ditelusuri kembali berbulan-bulan kemudian tanpa
+    membuka atLogic.
+    """
+
     tags: dict[str, str] = Field(default_factory=dict)
     """Tag berkardinalitas rendah, mis. `{"engine": "port"}`."""
 

@@ -236,6 +236,7 @@ def create_console_app(
         metric: str = Form(...),
         unit: str = Form(""),
         field_name: str = Form("value"),
+        panel_source: str = Form(""),
         scale: str = Form("1"),
         offset: str = Form("0"),
         poll_interval_seconds: str = Form("1"),
@@ -256,6 +257,7 @@ def create_console_app(
             "unit": unit.strip() or None,
             "field_name": field_name.strip() or "value",
             "enabled": enabled == "on",
+            "panel_source": panel_source.strip().upper() or None,
         }
         for nama, mentah in (
             ("scale", scale),
@@ -366,6 +368,8 @@ def create_console_app(
     @app.get("/logs", response_class=HTMLResponse)
     async def logs(request: Request, level: str | None = None) -> HTMLResponse:
         entries, error = await _safe(context.logs(level=level, limit=200))
+        getter = getattr(context, "storage_detail", None)
+        penyimpanan, penyimpanan_error = await _safe(getter()) if callable(getter) else (None, None)
         return page(
             request,
             "logs.html",
@@ -373,7 +377,32 @@ def create_console_app(
             entries=entries or [],
             error=error,
             level=level or "",
+            penyimpanan=penyimpanan,
+            penyimpanan_error=penyimpanan_error,
+            sandi=request.query_params.get("sandi"),
+            sandi_error=request.query_params.get("sandi_error"),
         )
+
+    @app.post("/logs/sandi")
+    async def tampilkan_sandi(pin: str = Form(...)) -> RedirectResponse:
+        """Tampilkan kata sandi admin InfluxDB, di balik PIN perangkat.
+
+        Dikembalikan lewat query string, dan itu disengaja terbatas: ia akan
+        terlihat di bilah alamat dan riwayat peramban, jadi halaman menyarankan
+        menutupnya setelah dicatat. Alternatifnya menyimpan sesi di Console —
+        yang berarti menambahkan mekanisme autentikasi utuh untuk satu kolom.
+        """
+        getter = getattr(context, "storage_password", None)
+        if not callable(getter):
+            return RedirectResponse("/logs", status_code=303)
+        try:
+            sandi = getter(pin)
+        except FleetViewError as exc:
+            return RedirectResponse(f"/logs?sandi_error={quote(exc.message)}", status_code=303)
+        except Exception as exc:
+            log.exception("console.sandi_gagal")
+            return RedirectResponse(f"/logs?sandi_error={quote(str(exc))}", status_code=303)
+        return RedirectResponse(f"/logs?sandi={quote(sandi)}", status_code=303)
 
     # -- Konfigurasi --------------------------------------------------------
 

@@ -63,6 +63,33 @@ class EdgeAgent:
             adapter=self.settings.collector.adapter,
         )
 
+        # Rincian penyimpanan lokal dicatat terpisah dan selalu, bukan hanya saat
+        # gagal. Saat memasang perangkat, pertanyaan pertama teknisi adalah "ini
+        # nyimpen ke mana?" — dan menjawabnya lewat berkas config berarti membuka
+        # terminal, yang justru ingin dihindari. Baris ini muncul di journald dan
+        # di halaman Log Edge Console.
+        #
+        # Tokennya TIDAK ikut dicatat; yang dicatat hanya apakah ia sudah ada.
+        # Log dikirim ke pusat dan dibaca luas.
+        storage = self.settings.storage
+        log.info(
+            "edge_agent.penyimpanan_lokal",
+            url=storage.influx_url,
+            org=storage.influx_org,
+            bucket=storage.influx_bucket,
+            retensi_hari=storage.retention_days,
+            token_terpasang=bool(storage.influx_token),
+            outbox=str(storage.outbox_path),
+        )
+        if not storage.influx_token:
+            log.warning(
+                "edge_agent.token_influx_kosong",
+                note=(
+                    "setiap penulisan lokal akan ditolak 401; sinkronisasi ke pusat "
+                    "tetap berjalan karena outbox adalah write barrier-nya"
+                ),
+            )
+
     def build_adapter(self) -> ProtocolAdapter:
         """Pilih adapter perangkat lapangan sesuai config.
 
@@ -76,7 +103,21 @@ class EdgeAgent:
             return MockLPAAdapter({})
         if choice == "simulator":
             return SimulatorAdapter()
-        return LPA104Adapter()
+        # Channel diambil dari registry sensor, bukan ditanam di kode: alamat
+        # UW mana yang berisi apa ditentukan ladder panel, dan itu berbeda per
+        # kapal. Adapter hanya perlu tahu alamat mana yang harus dibaca.
+        cfg = self.settings.collector
+        channels: list[str] = []
+        if cfg.sensors_path is not None:
+            registry = load_sensor_registry(cfg.sensors_path)
+            channels = sorted({s.channel for s in registry.enabled})
+        return LPA104Adapter(
+            host=cfg.lp_a104_host,
+            port=cfg.lp_a104_port,
+            unit_id=cfg.lp_a104_unit_id,
+            channels=channels,
+            timeout_seconds=cfg.poll_timeout_seconds,
+        )
 
     def build_collector(self, sink: object) -> Collector:
         """Rakit Collector. Membutuhkan config sensor.

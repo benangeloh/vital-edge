@@ -65,6 +65,13 @@ class StorageSettings(BaseModel):
 
     influx_url: str = "http://127.0.0.1:8086"
     influx_org: str = "fleetview"
+    influx_username: str = "fleetview"
+    """Nama pengguna admin InfluxDB lokal.
+
+    Bukan dipakai agent — agent memakai token. Disimpan di sini semata agar Edge
+    Console bisa memberitahukannya kepada teknisi yang perlu membuka UI InfluxDB
+    di kapal untuk memastikan data benar-benar masuk.
+    """
     influx_bucket: str = "telemetry"
     influx_token: str = ""
     """Kosong hanya boleh saat pengembangan. Diverifikasi ada di produksi."""
@@ -149,10 +156,18 @@ class CollectorSettings(BaseModel):
     adapter: Literal["mock", "simulator", "lp_a104"] = "simulator"
     """Adapter perangkat lapangan.
 
-    `lp_a104` belum bisa dipakai: jalur baca dari perangkat belum terkonfirmasi,
-    dan adapter-nya sengaja gagal keras daripada diam-diam mengembalikan kosong.
-    Lihat docs/hardware/LP-A104.md.
+    `lp_a104` membaca panel Autonics lewat Modbus TCP. Jalur itu sudah
+    terkonfirmasi pada panel sungguhan; lihat docs/hardware/LP-A104.md.
     """
+
+    lp_a104_host: str = ""
+    """Alamat IP panel LP-A104 di jaringan kapal, mis. `192.168.100.101`."""
+
+    lp_a104_port: int = Field(default=502, gt=0, lt=65536)
+
+    lp_a104_unit_id: int = Field(default=1, ge=0, le=255)
+    """Panel ini MENGABAIKAN unit id — 0, 1, 3, 255 dijawab sama. Tetap bisa
+    disetel karena frame Modbus menuntutnya, tetapi mengubahnya tidak berefek."""
 
     sensors_path: Path | None = None
     """Berkas YAML konfigurasi sensor. Wajib diisi di produksi."""

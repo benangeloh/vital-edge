@@ -30,7 +30,7 @@
     <table class="tbl">
       <thead>
         <tr>
-          <th>Nama sensor</th><th>Alamat</th><th>Besaran</th>
+          <th>Nama sensor</th><th>Alamat</th><th>Sumber panel</th><th>Besaran</th>
           <th>Satuan</th><th>Skala</th><th>Batas wajar</th><th>Aktif</th><th></th>
         </tr>
       </thead>
@@ -39,6 +39,7 @@
         <tr>
           <td class="mono">{{ s.sensor_id }}{% if s.field_name and s.field_name != "value" %}<span class="sub">.{{ s.field_name }}</span>{% endif %}</td>
           <td class="mono">{{ s.channel }}</td>
+          <td class="mono">{{ s.panel_source or "—" }}</td>
           <td>{{ s.metric }}</td>
           <td>{{ s.unit or "—" }}</td>
           <td class="mono">{{ s.scale | default(1) }}</td>
@@ -64,6 +65,23 @@
   </div>
   {% endif %}
 </section>
+
+{% if registry.ladder %}
+<section class="card card--ladder">
+  <h2 class="h2">Baris untuk ditempel ke atLogic</h2>
+  <p class="sub">
+    Nilai sensor hidup di area <span class="mono">D</span> milik PLC dan
+    <strong>tidak</strong> terbaca dari Ethernet — hanya area
+    <span class="mono">UW</span> yang terbaca. Tiap sensor butuh satu baris salin
+    di program panel. Salin blok ini ke akhir program Main, tepat sebelum
+    <span class="mono">END</span>, lalu download ke panel.
+  </p>
+  <pre class="snippet__body" id="ladder">{{ registry.ladder }}</pre>
+  <p class="sub">
+    Setelah download, nilainya langsung terbaca tanpa mengubah apa pun di sini.
+  </p>
+</section>
+{% endif %}
 
 <section class="card">
   <h2 class="h2">{% if diubah %}Ubah sensor {{ diubah.sensor_id }}{% else %}Tambah sensor{% endif %}</h2>
@@ -105,6 +123,19 @@
              placeholder="{{ 'UW100' if registry.adapter == 'lp_a104' else 'sim:me_port_rpm' }}"
              value="{{ diubah.channel if diubah else '' }}">
     </label>
+
+    {% if registry.adapter == "lp_a104" %}
+    <label class="field">
+      <span class="field__label">Alamat sumber di panel</span>
+      <input class="field__input mono" name="panel_source" maxlength="32"
+             placeholder="D00160"
+             value="{{ diubah.panel_source if diubah and diubah.panel_source else '' }}">
+      <span class="field__hint">
+        Alamat area <span class="mono">D</span> tempat nilai ini berada di ladder.
+        Bukan yang dibaca agent — dipakai untuk menyusun baris salin di bawah.
+      </span>
+    </label>
+    {% endif %}
 
     <label class="field">
       <span class="field__label">Besaran</span>
@@ -213,7 +244,7 @@
     <table class="tbl">
       <thead>
         <tr>
-          <th>Nama sensor</th><th>Alamat</th><th>Besaran</th>
+          <th>Nama sensor</th><th>Alamat</th><th>Sumber panel</th><th>Besaran</th>
           <th>Satuan</th><th>Skala</th><th>Batas wajar</th><th>Aktif</th><th></th>
         </tr>
       </thead>
@@ -222,6 +253,7 @@
         <tr>
           <td class="mono">{{ s.sensor_id }}{% if s.field_name and s.field_name != "value" %}<span class="sub">.{{ s.field_name }}</span>{% endif %}</td>
           <td class="mono">{{ s.channel }}</td>
+          <td class="mono">{{ s.panel_source or "—" }}</td>
           <td>{{ s.metric }}</td>
           <td>{{ s.unit or "—" }}</td>
           <td class="mono">{{ s.scale | default(1) }}</td>
@@ -247,6 +279,23 @@
   </div>
   {% endif %}
 </section>
+
+{% if registry.ladder %}
+<section class="card card--ladder">
+  <h2 class="h2">Baris untuk ditempel ke atLogic</h2>
+  <p class="sub">
+    Nilai sensor hidup di area <span class="mono">D</span> milik PLC dan
+    <strong>tidak</strong> terbaca dari Ethernet — hanya area
+    <span class="mono">UW</span> yang terbaca. Tiap sensor butuh satu baris salin
+    di program panel. Salin blok ini ke akhir program Main, tepat sebelum
+    <span class="mono">END</span>, lalu download ke panel.
+  </p>
+  <pre class="snippet__body" id="ladder">{{ registry.ladder }}</pre>
+  <p class="sub">
+    Setelah download, nilainya langsung terbaca tanpa mengubah apa pun di sini.
+  </p>
+</section>
+{% endif %}
 
 <section class="card">
   <h2 class="h2">{% if diubah %}Ubah sensor {{ diubah.sensor_id }}{% else %}Tambah sensor{% endif %}</h2>
@@ -288,6 +337,19 @@
              placeholder="{{ 'UW100' if registry.adapter == 'lp_a104' else 'sim:me_port_rpm' }}"
              value="{{ diubah.channel if diubah else '' }}">
     </label>
+
+    {% if registry.adapter == "lp_a104" %}
+    <label class="field">
+      <span class="field__label">Alamat sumber di panel</span>
+      <input class="field__input mono" name="panel_source" maxlength="32"
+             placeholder="D00160"
+             value="{{ diubah.panel_source if diubah and diubah.panel_source else '' }}">
+      <span class="field__hint">
+        Alamat area <span class="mono">D</span> tempat nilai ini berada di ladder.
+        Bukan yang dibaca agent — dipakai untuk menyusun baris salin di bawah.
+      </span>
+    </label>
+    {% endif %}
 
     <label class="field">
       <span class="field__label">Besaran</span>

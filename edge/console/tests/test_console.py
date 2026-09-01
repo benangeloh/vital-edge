@@ -10,6 +10,7 @@ buruk — karena itulah saat Console dibuka:
 
 from __future__ import annotations
 
+import re
 from collections.abc import Callable
 from typing import Any
 
@@ -226,9 +227,15 @@ class TestRingan:
     def test_tidak_ada_sumber_daya_eksternal(self, client: TestClient) -> None:
         """Kapal tidak punya internet. Satu tautan CDN berarti halaman menggantung
         menunggu waktu habis, tepat saat teknisi butuh jawaban cepat."""
+        # Yang diperiksa adalah SUMBER DAYA yang diambil — src= dan href= —
+        # bukan sembarang string "http://" di halaman. Halaman Log sengaja
+        # menampilkan alamat InfluxDB sebagai teks agar teknisi bisa
+        # memastikannya; itu informasi, bukan permintaan jaringan.
+        diambil = re.compile(r'(?:src|href)\s*=\s*["\'](https?:)?//', re.I)
         for path in PAGES:
             text = client.get(path).text
-            assert "http://" not in text.replace("http://localhost", "")
+            cocok = diambil.findall(text)
+            assert not cocok, f"{path} memuat sumber daya eksternal: {cocok}"
             assert "//cdn" not in text
 
     def test_aset_kecil(self, client: TestClient) -> None:
@@ -501,3 +508,72 @@ class TestKelolaSensor:
     ) -> None:
         html = make_client(make_context(fail={"sensor_registry"})).get("/sensors").text
         assert "Tidak bisa membaca daftar sensor" in html
+
+
+class TestRincianPenyimpanan:
+    """Saat memasang perangkat, pertanyaan pertama teknisi adalah "ini nyimpen ke
+    mana?". Menjawabnya lewat berkas config berarti membuka terminal."""
+
+    def test_rincian_influxdb_muncul_di_halaman_log(self, make_context: Callable[..., Any]) -> None:
+        html = make_client(make_context()).get("/logs").text
+        assert "Penyimpanan lokal" in html
+        assert "Bucket" in html
+        assert "Organisasi" in html
+
+    def test_token_tidak_pernah_ditampilkan(self, make_context: Callable[..., Any]) -> None:
+        """Halaman ini dibuka di kapal, sering di layar yang bisa dilihat orang lain."""
+        html = make_client(make_context()).get("/logs").text
+        assert "rahasia-token-influx" not in html
+        assert "terpasang" in html
+
+    def test_token_kosong_dijelaskan_akibatnya(self, make_context: Callable[..., Any]) -> None:
+        html = make_client(make_context(influx_token="")).get("/logs").text
+        assert "belum disetel" in html
+        assert "ditolak" in html
+
+    def test_kegagalan_tidak_menjatuhkan_halaman_log(
+        self, make_context: Callable[..., Any]
+    ) -> None:
+        html = make_client(make_context(fail={"storage_detail"})).get("/logs").text
+        assert "Tidak bisa membaca status penyimpanan" in html
+        assert "Log" in html
+
+
+class TestKataSandiInflux:
+    """Username perlu terlihat; kata sandi tidak boleh terbit ke jaringan.
+
+    Console tidak punya autentikasi dan di kapal ia terbuka ke LAN. Kata sandi
+    admin InfluxDB memberi kendali penuh atas penyimpanan telemetry kapal,
+    termasuk menghapusnya.
+    """
+
+    def test_username_ditampilkan(self, make_context: Callable[..., Any]) -> None:
+        html = make_client(make_context()).get("/logs").text
+        assert "Pengguna" in html
+        assert "fleetview" in html
+
+    def test_sandi_tidak_muncul_tanpa_pin(self, make_context: Callable[..., Any]) -> None:
+        html = make_client(make_context()).get("/logs").text
+        assert "sandi-admin-influx" not in html
+        assert "PIN 6 digit" in html
+
+    def test_pin_benar_menampilkan_sandi(self, make_context: Callable[..., Any]) -> None:
+        client = make_client(make_context(pin="123456"))
+        r = client.post("/logs/sandi", data={"pin": "123456"}, follow_redirects=False)
+        assert r.status_code == 303
+        assert "sandi=" in r.headers["location"]
+        assert "sandi-admin-influx" in client.get(r.headers["location"]).text
+
+    def test_pin_salah_ditolak(self, make_context: Callable[..., Any]) -> None:
+        client = make_client(make_context(pin="123456"))
+        r = client.post("/logs/sandi", data={"pin": "000000"}, follow_redirects=False)
+        assert "sandi_error" in r.headers["location"]
+        assert "sandi-admin-influx" not in client.get(r.headers["location"]).text
+
+    def test_sandi_tidak_tersimpan_dijelaskan_cara_menyetelnya(
+        self, make_context: Callable[..., Any]
+    ) -> None:
+        """Perangkat yang InfluxDB-nya disiapkan manual tidak punya berkas itu."""
+        html = make_client(make_context(sandi=None)).get("/logs").text
+        assert "tidak tersimpan di perangkat ini" in html
+        assert "influx user password" in html

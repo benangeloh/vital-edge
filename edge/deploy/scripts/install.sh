@@ -83,12 +83,30 @@ for _ in $(seq 1 60); do
 done
 
 INFLUX_TOKEN_FILE="${CONFIG_DIR}/influx.token"
+INFLUX_PASSWORD_FILE="${CONFIG_DIR}/influx-admin.password"
 if [[ ! -s "${INFLUX_TOKEN_FILE}" ]]; then
   # Kata sandi admin tidak pernah dipakai lagi setelah ini; yang dipakai agent
   # hanya tokennya. Karena itu ia dibuat acak dan tidak disimpan di mana pun.
+  # Kata sandi admin dibuat acak lalu DISIMPAN, tidak dibuang.
+  #
+  # Agent sendiri hanya memakai token, jadi secara teknis kata sandinya tidak
+  # pernah dibutuhkan lagi. Tetapi teknisi kadang perlu membuka UI InfluxDB di
+  # kapal untuk memastikan data benar-benar masuk, dan kata sandi yang hilang
+  # membuat satu-satunya jalan adalah menyetel ulang lewat terminal — persis
+  # yang ingin dihindari.
+  INFLUX_PASSWORD="$(openssl rand -base64 18 | tr -d '/+=' | cut -c1-16)"
+  printf '%s\n' "${INFLUX_PASSWORD}" > "${INFLUX_PASSWORD_FILE}"
+  # 0640 root:fleetview, bukan 0600.
+  #
+  # Berbeda dari secrets.env, yang dibaca systemd sebagai root sebelum melepas
+  # hak akses. Berkas ini dibaca oleh PROSES AGENT, yang berjalan sebagai
+  # fleetview — dengan 0600 milik root, halaman Log akan selalu melaporkan
+  # kata sandi "tidak tersimpan" padahal berkasnya ada.
+  chmod 0640 "${INFLUX_PASSWORD_FILE}"
+  chown root:fleetview "${INFLUX_PASSWORD_FILE}" 2>/dev/null || true
   if influx setup --skip-verify --force \
        --username fleetview \
-       --password "$(openssl rand -base64 24)" \
+       --password "${INFLUX_PASSWORD}" \
        --org fleetview --bucket telemetry --retention 90d >/dev/null 2>&1; then
     echo "==> InfluxDB di-provisioning (retensi 90 hari)"
   fi
@@ -172,6 +190,21 @@ if [[ -s "${pin_file}" ]]; then
 else
   echo "  Buka di peramban:   http://${ip:-<alamat-pi>}:8080/"
   echo "  Perangkat tampaknya sudah dikonfigurasi."
+fi
+echo
+echo "  Penyimpanan lokal (InfluxDB)"
+echo "    alamat  : http://127.0.0.1:8086     (dari laptop: http://${ip:-<pi>}:8086)"
+echo "    org     : fleetview"
+echo "    bucket  : telemetry, retensi 90 hari"
+echo "    user    : fleetview"
+if [[ -s "${INFLUX_TOKEN_FILE}" ]]; then
+  echo "    token   : terpasang di ${CONFIG_DIR}/agent.env"
+else
+  echo "    token   : BELUM ADA — penulisan lokal akan ditolak"
+fi
+if [[ -s "${INFLUX_PASSWORD_FILE}" ]]; then
+  echo "    sandi   : $(cat "${INFLUX_PASSWORD_FILE}")"
+  echo "              (juga tersimpan di ${INFLUX_PASSWORD_FILE}, mode 0600)"
 fi
 echo
 echo "  Periksa kapan saja:  sudo fleetview-status"
