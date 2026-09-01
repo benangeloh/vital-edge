@@ -72,10 +72,24 @@ pengguna `fleetview`, SSH dengan kunci publik saja, dan zona waktu UTC.
 **Login kata sandi harus dimatikan.** Perangkat ini akan berada di jaringan kapal
 yang tidak kita kendalikan.
 
-**Zona waktu UTC, tanpa kecuali.** Seluruh sistem memakai UTC dari ujung ke ujung.
-Pi yang memakai zona waktu lokal akan menghasilkan telemetry yang tampak bergeser
-beberapa jam di dashboard, dan itu jenis kesalahan yang butuh berhari-hari untuk
-dilacak.
+**Zona waktu UTC — dianjurkan, bukan wajib.**
+
+Telemetry **tidak terpengaruh** zona waktu sistem. Timestamp dibuat sebagai epoch
+mikrodetik lewat `now_micros()`, dan seluruh datetime di sistem ini sadar-timezone
+(datetime naif ditolak di batas sistem). WIB, WITA, atau UTC menghasilkan angka
+yang persis sama.
+
+Yang terpengaruh adalah **tampilan log**: `journalctl` dan `systemctl status`
+menampilkan waktu menurut zona sistem. Itu sebabnya UTC dianjurkan untuk armada:
+
+- Indonesia melintasi tiga zona waktu, dan kapal berpindah di antaranya. Log dari
+  kapal yang sama bisa terlihat melompat ke belakang setelah zonanya diubah.
+- Menyandingkan log 70 kapal dengan zona berbeda saat menyelidiki satu kejadian
+  menuntut konversi di kepala, tepat ketika ketelitian paling dibutuhkan.
+
+Kalau seluruh armada beroperasi di satu zona dan teknisi lebih nyaman membaca WIB,
+itu **pilihan yang sah**. Yang sebaiknya dihindari hanyalah mengubah zona pada
+perangkat yang sudah berjalan — riwayat log-nya jadi tidak berkesinambungan.
 
 ## 2. Sistem berkas dan dasar
 

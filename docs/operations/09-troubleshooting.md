@@ -195,8 +195,11 @@ Periksa zona waktu Pi lebih dulu:
 timedatectl    # harus UTC
 ```
 
-Seluruh sistem memakai UTC dari ujung ke ujung. Pi berzona waktu lokal
-menghasilkan telemetry yang tampak bergeser beberapa jam.
+Zona waktu sistem **tidak** menggeser telemetry — timestamp dibuat sebagai epoch
+mikrodetik dan tidak bergantung padanya. Kalau angka di dashboard tampak bergeser,
+sebabnya ada di tempat lain: jam perangkat yang salah, atau lompatan jam.
+
+Yang dipengaruhi zona waktu hanyalah tampilan `journalctl` dan `systemctl status`.
 
 Kalau zona waktunya benar, cari penanda lompatan jam:
 

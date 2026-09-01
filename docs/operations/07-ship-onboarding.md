@@ -114,7 +114,7 @@ Ringkasnya, dokumen itu memandu:
 
 | § | Isi | Kenapa penting |
 |---|---|---|
-| 1–3 | OS 64-bit, SSD, zona waktu UTC | SD card habis dalam hitungan bulan; zona waktu lokal menggeser seluruh telemetry |
+| 1–3 | OS 64-bit, SSD, zona waktu | SD card habis dalam hitungan bulan; UTC dianjurkan agar log 70 kapal bisa disandingkan |
 | 4 | InfluxDB lokal, retensi 90 hari | Tanpa batas, disk penuh dan akuisisi berhenti diam-diam |
 | 5 | Pasang Edge Agent | |
 | 6 | **Masukkan kredensial Tahap 1** | Di sinilah kedua potongan tadi dipakai |

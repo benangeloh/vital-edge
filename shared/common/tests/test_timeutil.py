@@ -37,3 +37,45 @@ def test_offset_non_utc_dinormalisasi_dengan_benar() -> None:
 
 def test_now_micros_masuk_akal() -> None:
     assert from_micros(now_micros()).year >= 2026
+
+
+class TestZonaWaktuSistemTidakBerpengaruh:
+    """Timestamp tidak boleh bergantung pada zona waktu perangkat.
+
+    Kapal berpindah antar zona — Indonesia sendiri melintasi tiga — dan teknisi
+    kadang menyetel Pi ke waktu setempat. Kalau itu menggeser data, gejalanya
+    baru terlihat berminggu-minggu kemudian sebagai riwayat yang tidak masuk
+    akal, dan sangat sulit dilacak balik ke sebabnya.
+    """
+
+    @pytest.mark.parametrize("tz", ["UTC", "Asia/Jakarta", "Asia/Jayapura", "America/New_York"])
+    def test_epoch_sama_di_zona_mana_pun(self, tz: str, monkeypatch: pytest.MonkeyPatch) -> None:
+        import time as _time
+
+        monkeypatch.setenv("TZ", "UTC")
+        _time.tzset()
+        acuan = now_micros()
+
+        monkeypatch.setenv("TZ", tz)
+        _time.tzset()
+        diuji = now_micros()
+
+        monkeypatch.setenv("TZ", "UTC")
+        _time.tzset()
+
+        # Selisihnya hanya waktu berjalan di antara dua pemanggilan, bukan
+        # pergeseran zona (yang akan berupa kelipatan jam).
+        assert abs(diuji - acuan) < 5_000_000
+
+    @pytest.mark.parametrize("tz", ["Asia/Jakarta", "Asia/Jayapura"])
+    def test_now_utc_tetap_utc(self, tz: str, monkeypatch: pytest.MonkeyPatch) -> None:
+        import time as _time
+
+        monkeypatch.setenv("TZ", tz)
+        _time.tzset()
+        saat = now_utc()
+        monkeypatch.setenv("TZ", "UTC")
+        _time.tzset()
+
+        assert saat.tzinfo is not None
+        assert saat.utcoffset() == timedelta(0)
