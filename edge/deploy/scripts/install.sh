@@ -70,6 +70,7 @@ ln -sfn "${RELEASE}/edge/deploy" "${PREFIX}/deploy"
 
 # Satu perintah untuk teknisi yang naik ke kapal.
 install -m 0755 "${SRC}/edge/deploy/scripts/fleetview-status.sh" /usr/local/bin/fleetview-status
+install -m 0755 "${SRC}/edge/deploy/scripts/detect-storage.sh" /usr/local/bin/fleetview-storage
 
 install -m 0644 "${SRC}/edge/deploy/systemd/fleetview-agent.service" /etc/systemd/system/
 install -m 0644 "${SRC}/edge/deploy/systemd/fleetview-agent-backup.service" /etc/systemd/system/
@@ -262,5 +263,9 @@ else
   echo "              setel ulang: influx user password --name fleetview"
 fi
 echo
+# Penyimpanan dilaporkan di akhir, bukan diabaikan. Perangkat yang datanya
+# mendarat di kartu SD akan bekerja normal berbulan-bulan lalu mati total —
+# dan itu satu-satunya kegagalan di sini yang tidak bisa diperbaiki dari darat.
+/usr/local/bin/fleetview-storage 2>/dev/null | sed 's/^/  /' || true
 echo "  Periksa kapan saja:  sudo fleetview-status"
 echo "==================================================================="

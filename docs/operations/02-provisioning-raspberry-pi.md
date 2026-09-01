@@ -26,6 +26,30 @@ Perkiraan waktu: 45 menit per unit, sebagian besar menunggu.
 | Daya | UPS/DC-UPS dengan baterai | Kapal sering kehilangan daya mendadak |
 | OS | Raspberry Pi OS Lite 64-bit (Bookworm) | Python 3.11, sama dengan lingkungan pengembangan |
 
+### Deteksi otomatis
+
+```bash
+sudo fleetview-storage
+```
+
+Mengenali tiap perangkat blok (NVMe, SSD, SSD-USB, HDD, kartu SD) dan menilai
+kecocokannya. `install.sh` menjalankannya otomatis di akhir pemasangan dan
+mencetak hasilnya — tidak perlu langkah terpisah untuk sekadar tahu.
+
+Kalau ada kandidat yang lebih baik dari mount sekarang, ia menyarankan perintah
+penyiapannya:
+
+```bash
+sudo fleetview-storage --siapkan /dev/sda
+```
+
+**Ini merusak** — memformat perangkat yang disebut dan memindahkan
+`/var/lib/fleetview` ke sana secara permanen (lewat UUID di `/etc/fstab`, bukan
+`/dev/sda1` — urutan penamaan perangkat USB bisa berubah setelah reboot). Isi
+`/var/lib/fleetview` yang sudah ada disalin, bukan dihapus. Perintah ini
+menolak menyentuh perangkat yang memuat sistem operasi atau sedang ter-mount,
+dan meminta nama perangkatnya diketik ulang sebagai konfirmasi.
+
 ### Kenapa SSD, dan kenapa tidak perlu besar
 
 Terukur: satu kapal butuh sekitar **37 GB** — InfluxDB 90 hari (20 GB), outbox

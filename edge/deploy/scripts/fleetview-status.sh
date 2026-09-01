@@ -150,8 +150,38 @@ fi
 
 judul "Disk"
 df -Ph "${DATA_DIR}" 2>/dev/null | awk 'NR==2 {printf "  %s terpakai %s, sisa %s\n", $6, $5, $4}'
-mountpoint -q "${DATA_DIR}" 2>/dev/null \
-  || warn "${DATA_DIR} bukan mount terpisah — pastikan bukan SD card"
+# Jenis medianya disebutkan, bukan sekadar "pastikan bukan SD card". Menyuruh
+# teknisi memastikan sesuatu yang bisa diperiksa program adalah pekerjaan yang
+# tidak perlu — dan yang paling sering dilewati.
+_media() {
+  local dev jenis
+  dev="$(findmnt -no SOURCE "$1" 2>/dev/null || findmnt -no SOURCE / 2>/dev/null)"
+  dev="$(printf '%s' "${dev}" | sed 's|/dev/||;s/[0-9]*$//;s/p$//')"
+  case "${dev}" in
+    nvme*)   jenis="NVMe" ;;
+    mmcblk*) jenis="kartu SD" ;;
+    *)       [ "$(cat "/sys/block/${dev}/queue/rotational" 2>/dev/null)" = "1" ] \
+               && jenis="HDD" || jenis="SSD" ;;
+  esac
+  printf '%s|%s' "${dev}" "${jenis}"
+}
+IFS='|' read -r _dev _jenis <<EOF
+$(_media "${DATA_DIR}")
+EOF
+if mountpoint -q "${DATA_DIR}" 2>/dev/null; then
+  case "${_jenis}" in
+    "kartu SD") bad "data di kartu SD (${_dev}) — akan habis dalam hitungan bulan" ;;
+    HDD)        warn "data di HDD (${_dev}) — getaran kapal memperpendek umurnya" ;;
+    *)          good "data di ${_jenis} (${_dev})" ;;
+  esac
+else
+  if [ "${_jenis}" = "kartu SD" ]; then
+    bad "${DATA_DIR} bukan mount terpisah — data menulis ke kartu SD (${_dev})"
+    warn "jalankan: sudo fleetview-storage"
+  else
+    warn "${DATA_DIR} bukan mount terpisah — data ikut di ${_dev} (${_jenis})"
+  fi
+fi
 
 judul "Setup"
 PIN_FILE="${DATA_DIR}/setup.pin"
