@@ -33,11 +33,44 @@ class FakeContext:
     hanya menunggu kebetulan.
     """
 
-    def __init__(self, *, fail: set[str] | None = None, empty: bool = False) -> None:
+    def __init__(
+        self,
+        *,
+        fail: set[str] | None = None,
+        empty: bool = False,
+        configured: bool = True,
+        pin: str = "123456",
+    ) -> None:
         self.fail = fail or set()
         self.empty = empty
         self.sync_triggered = 0
         self.exports: list[str] = []
+        self._configured = configured
+        self._pin = pin
+        self.provisioned: list[dict[str, Any]] = []
+
+    # -- provisioning -------------------------------------------------------
+
+    def is_configured(self) -> bool:
+        return self._configured
+
+    def setup_pin(self) -> str:
+        return self._pin
+
+    async def provision(
+        self, *, central_url: str, client_id: str, secret: str, ship_name: str | None = None
+    ) -> str:
+        self._guard("provision")
+        self.provisioned.append(
+            {
+                "central_url": central_url,
+                "client_id": client_id,
+                "secret": secret,
+                "ship_name": ship_name,
+            }
+        )
+        self._configured = True
+        return ship_name or "KM Hasil Setup"
 
     def _guard(self, name: str) -> None:
         if name in self.fail:

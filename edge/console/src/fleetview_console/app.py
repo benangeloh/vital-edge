@@ -22,8 +22,10 @@ verifikasi isinya. Sekitar 2 KB JavaScript sendiri lebih kecil, dan bisa dibaca.
 
 from __future__ import annotations
 
+import secrets
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlencode
 
 from fastapi import FastAPI, Form, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
@@ -99,6 +101,88 @@ def create_console_app(
 
     def page(request: Request, template: str, active: str, **extra: Any) -> HTMLResponse:
         return templates.TemplateResponse(request, template, {**base, "active": active, **extra})
+
+    # -- Setup perangkat ----------------------------------------------------
+    #
+    # Halaman ini ada supaya teknisi yang memasang Raspberry Pi di kapal tidak
+    # perlu menyentuh terminal. Ia satu-satunya halaman yang boleh diakses
+    # sebelum perangkat di-provisioning; sisanya dialihkan ke sini, karena
+    # menampilkan dasbor kosong tanpa menjelaskan apa yang kurang hanya membuat
+    # orang menebak.
+
+    def _configured() -> bool:
+        checker = getattr(context, "is_configured", None)
+        return bool(checker()) if callable(checker) else True
+
+    @app.middleware("http")
+    async def _arahkan_ke_setup(request: Request, call_next: Any) -> Any:
+        path = request.url.path
+        # `/api/` ikut dikecualikan. Pengalihan 303 ke halaman HTML membuat
+        # endpoint kesehatan tidak berguna bagi pemantau — dan pemantau yang
+        # menerima HTML akan melaporkan perangkat sehat sebagai perangkat rusak,
+        # atau sebaliknya. Permintaan API menjawab JSON apa pun keadaannya.
+        exempt = path.startswith(("/setup", "/static", "/api/"))
+        if not exempt and not _configured():
+            return RedirectResponse("/setup", status_code=303)
+        return await call_next(request)
+
+    @app.get("/setup", response_class=HTMLResponse)
+    async def setup_page(request: Request) -> HTMLResponse:
+        return templates.TemplateResponse(
+            request,
+            "setup.html",
+            {
+                **base,
+                "active": "/setup",
+                "sudah_dikonfigurasi": _configured(),
+                "error": request.query_params.get("error"),
+                "central_url": request.query_params.get("central_url", ""),
+                "client_id": request.query_params.get("client_id", ""),
+            },
+        )
+
+    @app.post("/setup")
+    async def setup_submit(
+        request: Request,
+        central_url: str = Form(...),
+        client_id: str = Form(...),
+        secret: str = Form(...),
+        pin: str = Form(""),
+        ship_name: str = Form(""),
+    ) -> RedirectResponse:
+        # PIN dicocokkan dengan perbandingan waktu-tetap. Console tidak punya
+        # autentikasi lain, dan selama setup ia harus bisa dijangkau dari laptop
+        # teknisi di jaringan kapal.
+        expected = getattr(context, "setup_pin", None)
+        if callable(expected) and not secrets.compare_digest(pin.strip(), str(expected())):
+            return _kembali_dengan_error(
+                "PIN salah. Jalankan `sudo fleetview-status` di perangkat untuk melihatnya.",
+                central_url,
+                client_id,
+            )
+
+        try:
+            nama = await context.provision(
+                central_url=central_url.strip(),
+                client_id=client_id.strip(),
+                secret=secret.strip(),
+                ship_name=ship_name.strip() or None,
+            )
+        except FleetViewError as exc:
+            log.warning("console.setup_gagal", code=exc.code, error=exc.message)
+            return _kembali_dengan_error(exc.message, central_url, client_id)
+        except Exception as exc:
+            log.exception("console.setup_gagal")
+            return _kembali_dengan_error(str(exc), central_url, client_id)
+
+        log.info("console.setup_berhasil", ship_name=nama)
+        return RedirectResponse("/setup?selesai=1", status_code=303)
+
+    def _kembali_dengan_error(pesan: str, central_url: str, client_id: str) -> RedirectResponse:
+        # Nilai yang sudah diketik dikembalikan ke formulir. Rahasianya TIDAK —
+        # ia akan tampil di bilah alamat dan tercatat di riwayat peramban.
+        query = urlencode({"error": pesan, "central_url": central_url, "client_id": client_id})
+        return RedirectResponse(f"/setup?{query}", status_code=303)
 
     # -- Ikhtisar -----------------------------------------------------------
 

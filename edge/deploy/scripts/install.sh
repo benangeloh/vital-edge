@@ -59,20 +59,120 @@ install -d /etc/systemd/journald.conf.d
 install -m 0644 "${SRC}/edge/deploy/systemd/journald-fleetview.conf" \
   /etc/systemd/journald.conf.d/fleetview.conf
 
-if [[ ! -f "${CONFIG_DIR}/agent.env" ]]; then
-  echo "PERINGATAN: ${CONFIG_DIR}/agent.env belum ada." >&2
-  echo "Kapal belum punya identitas. Lihat docs/operations/02-provisioning-raspberry-pi.md" >&2
+# --- InfluxDB lokal ---------------------------------------------------------
+#
+# Dipasang dan di-provisioning otomatis. Sebelumnya ini langkah manual dengan
+# token yang harus disalin sendiri — sumber kesalahan yang baru ketahuan setelah
+# agent berjalan dan setiap penulisan ditolak 401.
+if ! command -v influx >/dev/null 2>&1; then
+  echo "==> memasang InfluxDB"
+  curl -fsSL https://repos.influxdata.com/influxdata-archive.key \
+    | gpg --dearmor | tee /usr/share/keyrings/influxdata.gpg >/dev/null
+  echo "deb [signed-by=/usr/share/keyrings/influxdata.gpg] \
+https://repos.influxdata.com/debian stable main" \
+    > /etc/apt/sources.list.d/influxdata.list
+  apt-get update -qq && apt-get install -y -qq influxdb2
 fi
+systemctl enable --now influxdb >/dev/null 2>&1 || true
+
+# Tunggu InfluxDB siap. Port terbuka tidak berarti siap menerima perintah, dan
+# setup yang dijalankan terlalu dini gagal dengan pesan yang menyesatkan.
+for _ in $(seq 1 60); do
+  curl -sf http://127.0.0.1:8086/health >/dev/null 2>&1 && break
+  sleep 1
+done
+
+INFLUX_TOKEN_FILE="${CONFIG_DIR}/influx.token"
+if [[ ! -s "${INFLUX_TOKEN_FILE}" ]]; then
+  # Kata sandi admin tidak pernah dipakai lagi setelah ini; yang dipakai agent
+  # hanya tokennya. Karena itu ia dibuat acak dan tidak disimpan di mana pun.
+  if influx setup --skip-verify --force \
+       --username fleetview \
+       --password "$(openssl rand -base64 24)" \
+       --org fleetview --bucket telemetry --retention 90d >/dev/null 2>&1; then
+    echo "==> InfluxDB di-provisioning (retensi 90 hari)"
+  fi
+  # Token diambil dari config CLI, lalu disimpan dengan izin ketat.
+  if token="$(influx auth list --json 2>/dev/null | sed -n 's/.*"token": *"\([^"]*\)".*/\1/p' | head -1)"; then
+    [[ -n "${token}" ]] && printf '%s\n' "${token}" > "${INFLUX_TOKEN_FILE}"
+  fi
+  chmod 0640 "${INFLUX_TOKEN_FILE}" 2>/dev/null || true
+  chown root:fleetview "${INFLUX_TOKEN_FILE}" 2>/dev/null || true
+fi
+
+# agent.env selalu ditulis: isinya bukan rahasia, hanya penunjuk berkas config
+# dan token InfluxDB lokal. Halaman setup di Console yang mengisi sisanya.
+if [[ ! -f "${CONFIG_DIR}/agent.env" ]]; then
+  {
+    echo "FLEETVIEW_EDGE_CONFIG=${CONFIG_DIR}/edge.yaml"
+    [[ -s "${INFLUX_TOKEN_FILE}" ]] && \
+      echo "FLEETVIEW_STORAGE__INFLUX_TOKEN=$(cat "${INFLUX_TOKEN_FILE}")"
+  } > "${CONFIG_DIR}/agent.env"
+  chmod 0640 "${CONFIG_DIR}/agent.env"
+  chown root:fleetview "${CONFIG_DIR}/agent.env"
+fi
+
+# Config awal: cukup untuk agent menyala dalam mode setup. Identitas kapal
+# diisi lewat Edge Console, bukan dengan menyunting berkas ini.
+if [[ ! -f "${CONFIG_DIR}/edge.yaml" ]]; then
+  cp "${SRC}/edge/agent/config/sensors.example.yaml" "${CONFIG_DIR}/sensors.yaml"
+  cat > "${CONFIG_DIR}/edge.yaml" <<YAML
+# Ditulis oleh install.sh. Identitas kapal diisi lewat Edge Console.
+environment: development
+log_format: json
+
+collector:
+  adapter: simulator          # ganti ke lp_a104 setelah perangkat tersambung
+  sensors_path: ${CONFIG_DIR}/sensors.yaml
+
+storage:
+  data_dir: /var/lib/fleetview
+  outbox_path: /var/lib/fleetview/outbox.db
+  influx_url: http://127.0.0.1:8086
+
+console:
+  enabled: true
+  host: 0.0.0.0              # dijangkau laptop teknisi di jaringan kapal
+  allow_lan: true            # keputusan sadar: halaman setup dilindungi PIN
+  port: 8080
+YAML
+  chmod 0640 "${CONFIG_DIR}/edge.yaml"
+  chown root:fleetview "${CONFIG_DIR}/edge.yaml"
+fi
+
+# Console menulis config saat setup, jadi direktorinya harus bisa ditulis
+# pengguna fleetview — bukan hanya dibaca.
+chown root:fleetview "${CONFIG_DIR}"
+chmod 0770 "${CONFIG_DIR}"
+
 
 systemctl daemon-reload
 systemctl restart systemd-journald
 systemctl enable --now fleetview-agent-backup.timer
 
-if [[ -f "${CONFIG_DIR}/agent.env" ]]; then
-  systemctl enable --now fleetview-agent
-  systemctl restart fleetview-agent
-  echo "terpasang: ${VERSION}"
+systemctl enable --now fleetview-agent
+systemctl restart fleetview-agent
+
+# Alamat yang akan dibuka teknisi. Dicetak apa adanya supaya tidak perlu
+# menebak IP perangkat sendiri.
+ip="$(hostname -I 2>/dev/null | awk '{print $1}')"
+pin_file=/var/lib/fleetview/setup.pin
+sleep 3
+
+echo
+echo "==================================================================="
+echo "  FleetView Edge terpasang: ${VERSION}"
+echo
+if [[ -s "${pin_file}" ]]; then
+  echo "  Buka di peramban:   http://${ip:-<alamat-pi>}:8080/setup"
+  echo "  PIN setup      :    $(cat "${pin_file}")"
+  echo
+  echo "  Masukkan alamat pusat, ID klien, dan kunci rahasia di halaman itu."
+  echo "  Nomor kapal dan ID perangkat diambil otomatis — tidak perlu diketik."
 else
-  systemctl enable fleetview-agent
-  echo "terpasang: ${VERSION} (belum dijalankan; agent.env belum ada)"
+  echo "  Buka di peramban:   http://${ip:-<alamat-pi>}:8080/"
+  echo "  Perangkat tampaknya sudah dikonfigurasi."
 fi
+echo
+echo "  Periksa kapan saja:  sudo fleetview-status"
+echo "==================================================================="

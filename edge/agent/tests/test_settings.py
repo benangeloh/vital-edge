@@ -34,6 +34,7 @@ ship:
 """,
     )
     settings = load_settings(cfg)
+    assert settings.ship is not None
     assert settings.ship.ship_name == "KM Uji Coba"
     assert settings.console.port == 8080  # default terpakai
 
@@ -85,10 +86,35 @@ storage:
     assert s.storage.retention_days == 45
 
 
-def test_identitas_kapal_wajib_ada() -> None:
-    """Agent harus menolak start daripada mengirim data atas nama kapal lain."""
-    with pytest.raises(ConfigError):
-        load_settings(None)
+def test_tanpa_identitas_agent_tetap_start_dalam_mode_setup() -> None:
+    """Perangkat baru harus bisa menyala tanpa identitas.
+
+    Edge Console berjalan di dalam proses agent. Kalau agent menolak start tanpa
+    identitas, tidak ada antarmuka untuk memasukkannya — teknisi terpaksa
+    menyunting YAML lewat SSH, dan itu justru yang ingin dihilangkan.
+    """
+    settings = load_settings(None)
+    assert settings.ship is None
+    assert settings.is_configured is False
+
+
+def test_tanpa_identitas_akuisisi_ditolak() -> None:
+    """Perlindungannya tidak hilang, hanya berpindah tempat: agent boleh menyala,
+    tetapi tidak boleh mengumpulkan atau menyetor data atas nama kapal yang tidak
+    diketahui."""
+    settings = load_settings(None)
+    with pytest.raises(ConfigError) as exc:
+        settings.require_ship()
+    assert exc.value.code == "config.not_provisioned"
+
+
+def test_identitas_setengah_terisi_ditolak() -> None:
+    """Kapal yang teridentifikasi separuh lebih berbahaya daripada kapal yang
+    jelas-jelas belum dikonfigurasi."""
+    from fleetview_edge.settings import ShipIdentity
+
+    with pytest.raises(ValueError):
+        ShipIdentity(ship_id=uuid4(), ship_name="KM Uji")  # type: ignore[call-arg]
 
 
 def test_berkas_config_hilang_memberi_error_jelas(tmp_path: Path) -> None:
@@ -207,3 +233,50 @@ class TestVerifikasiProduksi:
             sync={"central_url": "https://x"},
             collector={"adapter": "lp_a104", "sensors_path": "/etc/fleetview/sensors.yaml"},
         ).verify_production_ready()
+
+
+class TestConsoleTerbukaKeJaringan:
+    """Console tidak punya autentikasi untuk halaman operasionalnya. Membukanya
+    ke jaringan kapal harus dinyatakan eksplisit, bukan tercapai diam-diam."""
+
+    def _cfg(self, tmp_path: Path, **console: object) -> Path:
+        sensors = tmp_path / "sensors.yaml"
+        sensors.write_text("sensors: []\n")
+        body = "\n".join(
+            f"  {k}: {str(v).lower() if isinstance(v, bool) else v}" for k, v in console.items()
+        )
+        return _write(
+            tmp_path,
+            f"""
+environment: production
+log_format: json
+ship:
+  ship_id: "{_SHIP["ship_id"]}"
+  ship_name: "KM Uji"
+  device_id: "{_SHIP["device_id"]}"
+collector:
+  adapter: lp_a104
+  sensors_path: {sensors}
+storage:
+  influx_token: "t"
+sync:
+  central_url: "https://pusat.test"
+  device_token: "tok"
+console:
+{body}
+""",
+        )
+
+    def test_terbuka_tanpa_izin_eksplisit_ditolak(self, tmp_path: Path) -> None:
+        settings = load_settings(self._cfg(tmp_path, host="0.0.0.0"))
+        with pytest.raises(ConfigError) as exc:
+            settings.verify_production_ready()
+        assert "allow_lan" in exc.value.message
+
+    def test_terbuka_dengan_izin_eksplisit_diterima(self, tmp_path: Path) -> None:
+        settings = load_settings(self._cfg(tmp_path, host="0.0.0.0", allow_lan=True))
+        settings.verify_production_ready()
+
+    def test_localhost_tetap_boleh_tanpa_izin(self, tmp_path: Path) -> None:
+        settings = load_settings(self._cfg(tmp_path, host="127.0.0.1"))
+        settings.verify_production_ready()

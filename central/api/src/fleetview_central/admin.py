@@ -22,6 +22,7 @@ from uuid import UUID
 from sqlalchemy import select
 
 from fleetview_central.modules.fleet.models import Device, Ship
+from fleetview_central.modules.fleet.service import FleetService
 from fleetview_central.modules.identity.models import DeviceCredential, User
 from fleetview_central.modules.identity.service import IdentityService
 from fleetview_central.platform.db import Database
@@ -35,13 +36,15 @@ __all__ = ["main"]
 async def _ship_add(s: ApiSettings, args: argparse.Namespace) -> int:
     db = Database(s.postgres_dsn)
     async with db.session() as session:
-        ship = Ship(
-            name=args.name,
-            slug=args.slug,
-            imo_number=args.imo,
-            **({"id": UUID(args.id)} if args.id else {}),
+        # Lewat FleetService, bukan membuat Ship langsung: service itu sekalian
+        # membuat baris ShipSyncState. Tanpanya, kapal tidak punya watermark
+        # sampai batch pertamanya tiba — sehingga dashboard dan endpoint sync
+        # melaporkan kapal yang baru didaftarkan seolah tidak dikenal.
+        ship = await FleetService(session).create_ship(
+            name=args.name, slug=args.slug, imo_number=args.imo
         )
-        session.add(ship)
+        if args.id:
+            ship.id = UUID(args.id)
         await session.commit()
         print(f"ship_id  {ship.id}")  # noqa: T201
         print(f"slug     {ship.slug}")  # noqa: T201

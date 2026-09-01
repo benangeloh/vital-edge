@@ -8,6 +8,7 @@ from fastapi import APIRouter, Request
 from pydantic import BaseModel, Field
 
 from fleetview_central.http.envelope import success
+from fleetview_central.modules.fleet.service import FleetService
 from fleetview_central.modules.identity.service import IdentityService
 from fleetview_central.modules.ops.service import AuditService
 from fleetview_central.platform.deps import CurrentUser, DbSession
@@ -57,12 +58,20 @@ async def device_token(body: DeviceLoginRequest, request: Request, db: DbSession
         resource_id=str(ship_id),
         ip_address=_client_ip(request),
     )
+    # Nama dan slug kapal ikut dikembalikan supaya Edge Console bisa menyusun
+    # seluruh identitas kapal dari SATU penukaran kredensial. Tanpa itu, teknisi
+    # yang memasang perangkat harus mengetik ulang UUID panjang dari layar lain —
+    # sumber salah ketik yang tidak akan ketahuan sampai data masuk atas nama
+    # kapal yang keliru.
+    ship = await FleetService(db).ship_by_id(ship_id)
     return success(
         {
             "access_token": token,
             "token_type": "bearer",
             "device_id": str(device_id),
             "ship_id": str(ship_id),
+            "ship_name": ship.name if ship else None,
+            "ship_slug": ship.slug if ship else None,
         }
     )
 

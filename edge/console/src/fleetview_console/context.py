@@ -140,6 +140,18 @@ class ConsoleContext(Protocol):
     async def trigger_sync(self) -> str: ...
     async def start_export(self, target: str) -> str: ...
 
+    # -- provisioning -------------------------------------------------------
+    #
+    # Opsional: Console tetap bisa dipakai dengan context yang tidak
+    # menyediakannya (misalnya di pengujian), dan halaman setup akan
+    # menyembunyikan dirinya sendiri.
+
+    def is_configured(self) -> bool: ...
+    def setup_pin(self) -> str: ...
+    async def provision(
+        self, *, central_url: str, client_id: str, secret: str, ship_name: str | None = None
+    ) -> str: ...
+
 
 #: Bentuk callable yang dipakai `create_console_app` bila agent memilih
 #: menyediakan fungsi lepas alih-alih objek utuh.

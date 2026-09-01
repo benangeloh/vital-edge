@@ -1,0 +1,101 @@
+{% extends "base.html" %}
+{% block title %}Setup Perangkat{% endblock %}
+{% block content %}
+
+{% if request.query_params.get("selesai") %}
+  <h1 class="h1">Perangkat terpasang</h1>
+  <section class="card">
+    <p class="ok" role="status">
+      Konfigurasi tersimpan. Agent sedang dijalankan ulang dan akan mulai
+      mengumpulkan data dalam beberapa detik.
+    </p>
+    <p>Muat ulang halaman ini sebentar lagi untuk melihat ikhtisar kapal.</p>
+    <p><a class="btn" href="/">Buka ikhtisar</a></p>
+  </section>
+
+{% elif sudah_dikonfigurasi %}
+  <h1 class="h1">Perangkat sudah terpasang</h1>
+  <section class="card">
+    <p>Perangkat ini sudah punya identitas kapal dan kredensial.</p>
+    <p class="sub">
+      Isi ulang formulir di bawah hanya bila kapal berganti, atau bila
+      kredensialnya diterbitkan ulang di dashboard pusat. Menyimpan akan
+      menimpa identitas yang sekarang.
+    </p>
+    <p><a class="btn" href="/">Buka ikhtisar</a></p>
+  </section>
+
+{% else %}
+  <h1 class="h1">Setup perangkat</h1>
+  <p class="lead">
+    Perangkat ini belum punya identitas kapal, jadi belum mengumpulkan data.
+    Isi tiga kolom di bawah — <strong>nomor kapal dan ID perangkat diambil
+    otomatis</strong> dari pusat, tidak perlu diketik.
+  </p>
+{% endif %}
+
+{% if not request.query_params.get("selesai") %}
+<section class="card">
+  <h2 class="h2">Sambungkan ke pusat</h2>
+
+  {% if error %}
+    <p class="err" role="alert">{{ error }}</p>
+  {% endif %}
+
+  <form method="post" action="/setup" class="form">
+    <label class="field">
+      <span class="field__label">Alamat pusat</span>
+      <input class="field__input" type="url" name="central_url" required
+             inputmode="url" autocomplete="off" spellcheck="false"
+             placeholder="https://fleetview.example.com"
+             value="{{ central_url }}">
+      <span class="field__hint">Alamat server FleetView. Tanyakan ke tim darat.</span>
+    </label>
+
+    <label class="field">
+      <span class="field__label">ID klien</span>
+      <input class="field__input" type="text" name="client_id" required
+             autocomplete="off" spellcheck="false" autocapitalize="none"
+             placeholder="ship-071" value="{{ client_id }}">
+    </label>
+
+    <label class="field">
+      <span class="field__label">Kunci rahasia</span>
+      <input class="field__input" type="password" name="secret" required
+             autocomplete="off" spellcheck="false">
+      <span class="field__hint">
+        Diberikan dashboard pusat saat kapal didaftarkan. Hanya ditampilkan
+        sekali di sana — kalau hilang, minta diterbitkan ulang.
+      </span>
+    </label>
+
+    <label class="field">
+      <span class="field__label">Nama kapal <span class="sub">(opsional)</span></span>
+      <input class="field__input" type="text" name="ship_name"
+             placeholder="diambil otomatis dari pusat">
+      <span class="field__hint">Biarkan kosong kecuali pusat tidak mengirimkannya.</span>
+    </label>
+
+    <label class="field">
+      <span class="field__label">PIN perangkat</span>
+      <input class="field__input" type="text" name="pin" required
+             inputmode="numeric" pattern="[0-9]{6}" maxlength="6"
+             autocomplete="off" placeholder="6 digit">
+      <span class="field__hint">
+        Jalankan <span class="mono">sudo fleetview-status</span> di perangkat
+        untuk melihatnya. PIN memastikan hanya orang yang benar-benar memegang
+        perangkat ini yang bisa mengarahkannya.
+      </span>
+    </label>
+
+    <button class="btn btn--primary" type="submit">Sambungkan</button>
+  </form>
+
+  <p class="sub">
+    Kredensial diuji ke pusat lebih dulu. Kalau ditolak, tidak ada yang
+    disimpan — perangkat tetap seperti sebelumnya.
+  </p>
+</section>
+{% endif %}
+
+{% endblock %}

@@ -100,6 +100,9 @@ class FleetService:
         muncul sebagai IntegrityError di tengah transaksi."""
         return (await self._db.execute(select(Ship).where(Ship.slug == slug))).scalar_one_or_none()
 
+    async def ship_by_id(self, ship_id: UUID) -> Ship | None:
+        return await self._db.get(Ship, ship_id)
+
     async def device_by_id(self, device_id: UUID) -> Device | None:
         return await self._db.get(Device, device_id)
 

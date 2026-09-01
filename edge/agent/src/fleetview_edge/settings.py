@@ -37,7 +37,12 @@ __all__ = ["EdgeSettings", "load_settings"]
 
 
 class ShipIdentity(BaseModel):
-    """Identitas kapal. Wajib, tanpa default."""
+    """Identitas kapal.
+
+    Seluruh isinya wajib bila bagian ini ada — kapal setengah teridentifikasi
+    lebih berbahaya daripada kapal yang jelas-jelas belum dikonfigurasi. Bagian
+    ini sendiri boleh tidak ada; lihat `EdgeSettings.ship`.
+    """
 
     model_config = ConfigDict(extra="forbid")
 
@@ -169,6 +174,19 @@ class ConsoleSettings(BaseModel):
     dari LAN kapal — Console tidak boleh menghadap internet."""
     port: int = Field(default=8080, gt=0, lt=65536)
 
+    allow_lan: bool = False
+    """Izinkan Console dijangkau dari jaringan kapal (`host: 0.0.0.0`).
+
+    Console tidak punya autentikasi untuk halaman operasionalnya, jadi ini harus
+    dinyatakan eksplisit — bukan tercapai diam-diam karena host kebetulan
+    disetel 0.0.0.0.
+
+    Dalam praktiknya ini memang dibutuhkan: teknisi membuka halaman setup dan
+    diagnosis dari laptop atau tablet, dan mengharuskan port-forward SSH berarti
+    mengembalikan terminal ke dalam alur yang justru ingin dibebaskan darinya.
+    Halaman setup sendiri tetap dilindungi PIN.
+    """
+
 
 class EdgeSettings(BaseSettings):
     """Konfigurasi lengkap Edge Agent."""
@@ -204,11 +222,64 @@ class EdgeSettings(BaseSettings):
     log_format: Literal["console", "json"] = "json"
     config_version: str = "local"
 
-    ship: ShipIdentity
+    ship: ShipIdentity | None = None
+    """Kosong berarti perangkat **belum di-provisioning**.
+
+    Dulu ini wajib, dan akibatnya agent menolak start di perangkat baru. Itu
+    menciptakan lingkaran: Edge Console berjalan di dalam proses agent, jadi
+    tanpa agent tidak ada antarmuka untuk memasukkan identitasnya — teknisi
+    terpaksa menyunting YAML lewat SSH.
+
+    Sekarang agent tetap menyala dalam mode setup: Console saja, tanpa akuisisi
+    dan tanpa sinkronisasi, sampai identitas diisi lewat halaman setup.
+    """
     storage: StorageSettings = Field(default_factory=StorageSettings)
     collector: CollectorSettings = Field(default_factory=CollectorSettings)
     sync: SyncSettings = Field(default_factory=SyncSettings)
     console: ConsoleSettings = Field(default_factory=ConsoleSettings)
+
+    config_path: Path | None = Field(default=None, exclude=True)
+    """Berkas YAML asal config ini, bila ada.
+
+    Diperlukan halaman setup untuk tahu ke mana identitas harus dituliskan.
+    Ditandai `exclude` supaya tidak ikut terbawa saat config di-dump ke Console
+    atau ke log — ia jalur berkas, bukan setelan.
+    """
+
+    @property
+    def is_configured(self) -> bool:
+        """Perangkat siap mengumpulkan dan menyetor data.
+
+        Butuh identitas kapal **dan** kredensial device. Identitas tanpa
+        kredensial berarti akuisisi berjalan tetapi tidak ada yang bisa
+        disetorkan — outbox menumpuk tanpa ada yang menyadari.
+        """
+        return self.ship is not None and bool(
+            self.sync.device_token or (self.sync.device_client_id and self.sync.device_secret)
+        )
+
+    @property
+    def ship_label(self) -> str:
+        """Nama kapal untuk ditampilkan, aman dipakai sebelum provisioning."""
+        return self.ship.ship_name if self.ship else "(belum dikonfigurasi)"
+
+    @property
+    def ship_id_label(self) -> str:
+        return str(self.ship.ship_id) if self.ship else "-"
+
+    def require_ship(self) -> ShipIdentity:
+        """Identitas kapal, untuk jalur yang hanya berjalan setelah provisioning.
+
+        Melempar, bukan mengembalikan None: akuisisi dan sinkronisasi tidak punya
+        perilaku yang masuk akal tanpa identitas — data tanpa pemilik lebih buruk
+        daripada tidak ada data.
+        """
+        if self.ship is None:
+            raise ConfigError(
+                "perangkat belum di-provisioning; buka Edge Console lalu selesaikan setup",
+                code="config.not_provisioned",
+            )
+        return self.ship
 
     @field_validator("log_level")
     @classmethod
@@ -229,6 +300,17 @@ class EdgeSettings(BaseSettings):
         if self.environment != "production":
             return
 
+        # Perangkat yang belum di-provisioning tidak diperiksa: ia memang belum
+        # punya apa-apa, dan menolak start justru menghilangkan satu-satunya
+        # antarmuka untuk mengisinya.
+        #
+        # Yang diperiksa `ship is None`, BUKAN `is_configured`. Begitu identitas
+        # kapal terisi, perangkat menyatakan dirinya sudah di-provisioning, dan
+        # sejak titik itu kredensial yang hilang adalah salah konfigurasi yang
+        # harus dilaporkan — bukan alasan untuk melewati pemeriksaan.
+        if self.ship is None:
+            return
+
         problems: list[str] = []
         if not self.storage.influx_token:
             problems.append("storage.influx_token kosong")
@@ -243,10 +325,12 @@ class EdgeSettings(BaseSettings):
             )
         if self.collector.sensors_path is None:
             problems.append("collector.sensors_path kosong")
-        if self.console.host == "0.0.0.0":
+        if self.console.host == "0.0.0.0" and not self.console.allow_lan:
             problems.append(
-                "console.host adalah 0.0.0.0 — Edge Console tidak boleh mendengarkan "
-                "di semua antarmuka tanpa keputusan sadar"
+                "console.host adalah 0.0.0.0 tetapi console.allow_lan belum disetel — "
+                "Edge Console tidak punya autentikasi, jadi membukanya ke jaringan "
+                "kapal harus keputusan sadar. Setel console.allow_lan: true bila memang "
+                "diinginkan, atau ikat ke 127.0.0.1 dan akses lewat port-forward SSH"
             )
         if problems:
             raise ConfigError(
@@ -293,7 +377,7 @@ def load_settings(config_path: Path | None = None) -> EdgeSettings:
             base = loaded
 
     try:
-        return EdgeSettings(**base)
+        return EdgeSettings(**base, config_path=config_path)
     except Exception as exc:  # pydantic ValidationError
         raise ConfigError(
             f"config tidak valid: {exc}",

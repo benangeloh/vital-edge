@@ -32,6 +32,7 @@ from fleetview_edge.collector import BackoffPolicy, Collector, CollectorClock
 from fleetview_edge.config import load_sensor_registry
 from fleetview_edge.console_context import AgentConsoleContext
 from fleetview_edge.outbox import OutboxSink, OutboxStore, SqliteSequenceSource
+from fleetview_edge.provisioning import setup_pin
 from fleetview_edge.settings import EdgeSettings
 from fleetview_edge.storage import StorageWriter
 from fleetview_edge.sync import (
@@ -68,6 +69,36 @@ class EdgeRuntime:
 
     def build(self) -> None:
         cfg = self.settings
+
+        # Perangkat yang belum di-provisioning menyala dalam MODE SETUP: hanya
+        # Edge Console, tanpa akuisisi dan tanpa sinkronisasi.
+        #
+        # Ini yang memutus lingkaran ayam-telur. Console berjalan di dalam proses
+        # agent, jadi kalau agent menolak start tanpa identitas, tidak ada
+        # antarmuka untuk memasukkan identitasnya — dan teknisi terpaksa
+        # menyunting YAML lewat SSH.
+        #
+        # Akuisisi TIDAK dijalankan dengan identitas kosong. Data tanpa pemilik
+        # yang jelas lebih buruk daripada tidak ada data: ia akan menumpuk di
+        # outbox tanpa pernah bisa disetorkan, dan menutupi kenyataan bahwa
+        # perangkat belum selesai dipasang.
+        if not cfg.is_configured:
+            # PIN dibuat SEKARANG, bukan saat formulir pertama dikirim. Teknisi
+            # membutuhkannya sebelum mengisi apa pun; PIN yang baru ada setelah
+            # percobaan pertama gagal membuat orang menebak-nebak.
+            cfg.storage.data_dir.mkdir(parents=True, exist_ok=True)
+            pin = setup_pin(cfg.storage.data_dir / "setup.pin")
+            log.warning(
+                "edge_runtime.mode_setup",
+                note="perangkat belum di-provisioning; hanya Console yang berjalan",
+                punya_identitas=cfg.ship is not None,
+                punya_kredensial=bool(cfg.sync.device_client_id or cfg.sync.device_token),
+                console=f"http://{cfg.console.host}:{cfg.console.port}/setup",
+                setup_pin=pin,
+            )
+            self.console = self._build_console()
+            return
+
         if cfg.collector.sensors_path is None:
             raise ConfigError(
                 "collector.sensors_path belum disetel; agent tidak bisa tahu "
@@ -93,8 +124,8 @@ class EdgeRuntime:
             # OutboxSink adalah write barrier: data durable sebelum apa pun
             # terjadi padanya. StorageWriter berada di hilirnya dan boleh gagal.
             sink=OutboxSink(self.outbox, downstream=self.storage),
-            ship_id=cfg.ship.ship_id,
-            device_id=cfg.ship.device_id,
+            ship_id=self.settings.require_ship().ship_id,
+            device_id=self.settings.require_ship().device_id,
             clock=CollectorClock(
                 SqliteSequenceSource(self.outbox),
                 jump_threshold_seconds=cfg.collector.clock_jump_threshold_seconds,
@@ -135,7 +166,7 @@ class EdgeRuntime:
             TransportSlot(
                 adapter=FileExportTransport(
                     target_dir=cfg.storage.data_dir / "export",
-                    ship_slug=cfg.ship.ship_name.replace(" ", "-"),
+                    ship_slug=self.settings.require_ship().ship_name.replace(" ", "-"),
                 ),
                 max_priority=cfg.sync.cellular_max_priority,  # type: ignore[arg-type]
             )
@@ -166,6 +197,9 @@ class EdgeRuntime:
         from fleetview_console import create_console_app
 
         context = AgentConsoleContext(
+            config_path=self.settings.config_path,
+            # Berhenti rapi setelah provisioning; systemd yang menyalakan lagi.
+            on_provisioned=self.stop,
             settings=self.settings,
             agent_version=self.agent.version,
             collector=self.collector,
@@ -174,8 +208,8 @@ class EdgeRuntime:
         )
         return create_console_app(
             context=context,
-            ship_name=self.settings.ship.ship_name,
-            ship_id=str(self.settings.ship.ship_id),
+            ship_name=self.settings.ship_label,
+            ship_id=self.settings.ship_id_label,
             agent_version=self.agent.version,
             environment=self.settings.environment,
         )
@@ -184,14 +218,14 @@ class EdgeRuntime:
 
     async def run(self) -> None:
         """Jalankan semua komponen sampai stop() dipanggil."""
-        assert self.collector is not None and self.sync is not None
-
-        tasks: list[asyncio.Task[None]] = [
-            # Akuisisi lebih dulu. Kalau central tidak terjangkau, kapal tetap
-            # mengumpulkan data — itu keseluruhan premis offline-first.
-            asyncio.create_task(self.collector.run(), name="collector"),
-            asyncio.create_task(self.sync.run(), name="sync"),
-        ]
+        tasks: list[asyncio.Task[None]] = []
+        if self.collector is not None and self.sync is not None:
+            tasks += [
+                # Akuisisi lebih dulu. Kalau central tidak terjangkau, kapal tetap
+                # mengumpulkan data — itu keseluruhan premis offline-first.
+                asyncio.create_task(self.collector.run(), name="collector"),
+                asyncio.create_task(self.sync.run(), name="sync"),
+            ]
         if self.console is not None:
             tasks.append(asyncio.create_task(self._serve_console(), name="console"))
 
@@ -207,15 +241,17 @@ class EdgeRuntime:
         log.info(
             "edge_runtime.started",
             components=[t.get_name() for t in tasks],
-            ship_id=str(self.settings.ship.ship_id),
+            ship_id=self.settings.ship_id_label,
         )
         try:
             await self._stopping.wait()
         finally:
             notifier.stopping()
             notifier.close()
-            self.collector.stop()
-            self.sync.stop()
+            if self.collector is not None:
+                self.collector.stop()
+            if self.sync is not None:
+                self.sync.stop()
             for task in tasks:
                 task.cancel()
             for task in tasks:
@@ -244,7 +280,17 @@ class EdgeRuntime:
         berulang kali dalam keadaan itu hanya membuang siklus akuisisi dan
         menyulitkan diagnosis.
         """
-        assert self.collector is not None
+        if self.collector is None:
+            # Mode setup: tidak ada akuisisi yang bisa dibuktikan maju. Ping tetap
+            # dikirim supaya systemd tidak merestart perangkat yang memang sedang
+            # menunggu dikonfigurasi — restart berulang justru menutup Console
+            # tepat saat teknisi mencoba memakainya.
+            while not self._stopping.is_set():
+                notifier.alive()
+                notifier.status("menunggu setup — buka Edge Console")
+                with contextlib.suppress(TimeoutError):
+                    await asyncio.wait_for(self._stopping.wait(), timeout=interval)
+            return
         # -1 menjamin satu ping pada iterasi pertama, apa pun keadaannya. Itu
         # kelonggaran start-up yang disengaja: poll pertama bisa lambat saat
         # negosiasi perangkat, dan merestart karenanya adalah restart palsu.

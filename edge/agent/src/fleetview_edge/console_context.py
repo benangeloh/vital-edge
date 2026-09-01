@@ -8,10 +8,11 @@ penyimpanan, dan tanpa jaringan.
 from __future__ import annotations
 
 import contextlib
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
-from fleetview_common import now_micros
+from fleetview_common import ConfigError, now_micros
 from fleetview_console import (
     ExportTarget,
     LogEntry,
@@ -23,6 +24,7 @@ from fleetview_console import (
     redact_config,
 )
 from fleetview_edge.collector import Collector
+from fleetview_edge.provisioning import provision, setup_pin
 from fleetview_edge.settings import EdgeSettings
 from fleetview_edge.storage import StorageWriter
 from fleetview_edge.sync import SyncEngine, TransportKind
@@ -49,6 +51,8 @@ class AgentConsoleContext:
         collector: Collector | None = None,
         storage: StorageWriter | None = None,
         sync_engine: SyncEngine | None = None,
+        config_path: Path | None = None,
+        on_provisioned: Callable[[], None] | None = None,
     ) -> None:
         self._settings = settings
         self._version = agent_version
@@ -56,6 +60,49 @@ class AgentConsoleContext:
         self._storage = storage
         self._sync = sync_engine
         self._metrics = SystemMetrics(data_dir=settings.storage.data_dir)
+        self._config_path = config_path
+        self._on_provisioned = on_provisioned
+
+    # -- provisioning -------------------------------------------------------
+
+    def is_configured(self) -> bool:
+        return self._settings.is_configured
+
+    def setup_pin(self) -> str:
+        """PIN yang melindungi halaman setup.
+
+        Disimpan di sebelah outbox, bukan di direktori config: direktori config
+        dibaca dan disalin saat diagnosis, dan PIN tidak perlu ikut ke mana-mana.
+        """
+        return setup_pin(self._settings.storage.data_dir / "setup.pin")
+
+    async def provision(
+        self, *, central_url: str, client_id: str, secret: str, ship_name: str | None = None
+    ) -> str:
+        """Tukar kredensial, tulis config, lalu minta agent dijalankan ulang.
+
+        Agent tidak memuat ulang config sendiri. Ia berhenti dengan rapi, dan
+        systemd (`Restart=always`) menyalakannya kembali — kali ini dengan
+        identitas yang sudah terisi. Jalur itu dipilih karena tidak menuntut hak
+        khusus dari Console dan memakai mekanisme yang memang sudah teruji setiap
+        kali perangkat reboot.
+        """
+        if self._config_path is None:
+            raise ConfigError(
+                "lokasi berkas config tidak diketahui; agent dijalankan tanpa --config?",
+                code="provisioning.no_config_path",
+            )
+        result = await provision(
+            central_url=central_url,
+            client_id=client_id,
+            secret=secret,
+            config_path=self._config_path,
+            secrets_path=self._config_path.parent / "secrets.env",
+            ship_name_override=ship_name,
+        )
+        if self._on_provisioned is not None:
+            self._on_provisioned()
+        return result.handshake.ship_name
 
     # -- sistem -------------------------------------------------------------
 
@@ -81,9 +128,9 @@ class AgentConsoleContext:
 
         disk_percent, disk_free = self._metrics.disk()
         return SystemSnapshot(
-            ship_id=str(self._settings.ship.ship_id),
-            ship_name=self._settings.ship.ship_name,
-            device_id=str(self._settings.ship.device_id),
+            ship_id=self._settings.ship_id_label,
+            ship_name=self._settings.ship_label,
+            device_id=str(self._settings.ship.device_id) if self._settings.ship else "-",
             agent_version=self._version,
             environment=self._settings.environment,
             config_version=self._settings.config_version,

@@ -54,9 +54,9 @@ class EdgeAgent:
 
         log.info(
             "edge_agent.configured",
-            ship_id=str(self.settings.ship.ship_id),
-            ship_name=self.settings.ship.ship_name,
-            device_id=str(self.settings.ship.device_id),
+            ship_id=self.settings.ship_id_label,
+            ship_name=self.settings.ship_label,
+            device_id=str(self.settings.ship.device_id) if self.settings.ship else "-",
             environment=self.settings.environment,
             config_version=self.settings.config_version,
             console_enabled=self.settings.console.enabled,
@@ -110,8 +110,8 @@ class EdgeAgent:
             adapter=self.build_adapter(),
             registry=registry,
             sink=sink,  # type: ignore[arg-type]
-            ship_id=self.settings.ship.ship_id,
-            device_id=self.settings.ship.device_id,
+            ship_id=self.settings.require_ship().ship_id,
+            device_id=self.settings.require_ship().device_id,
             clock=CollectorClock(jump_threshold_seconds=cfg.clock_jump_threshold_seconds),
             poll_interval_seconds=cfg.poll_interval_seconds,
             poll_timeout_seconds=cfg.poll_timeout_seconds,
@@ -174,8 +174,8 @@ class EdgeAgent:
         )
         return create_console_app(
             context=context,
-            ship_name=self.settings.ship.ship_name,
-            ship_id=str(self.settings.ship.ship_id),
+            ship_name=self.settings.ship_label,
+            ship_id=self.settings.ship_id_label,
             agent_version=self.version,
             environment=self.settings.environment,
         )

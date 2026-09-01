@@ -275,3 +275,102 @@ class TestRedaksi:
 
         out = redact_config({"a": {"b": [{"secret": "x"}]}})
         assert out["a"]["b"][0]["secret"] == REDACTED
+
+
+class TestHalamanSetup:
+    """Setup lewat web adalah alasan perangkat baru bisa dipasang tanpa terminal.
+
+    Yang diuji: teknisi tidak perlu mengetik UUID, PIN benar-benar melindungi,
+    dan kredensial yang salah tidak menghilangkan apa yang sudah diketik.
+    """
+
+    def test_perangkat_belum_dikonfigurasi_dialihkan_ke_setup(
+        self, make_context: Callable[..., Any]
+    ) -> None:
+        client = make_client(make_context(configured=False))
+        r = client.get("/", follow_redirects=False)
+        assert r.status_code == 303
+        assert r.headers["location"] == "/setup"
+
+    def test_health_tidak_ikut_dialihkan(self, make_context: Callable[..., Any]) -> None:
+        """Pemantau yang menerima HTML akan salah menilai keadaan perangkat."""
+        client = make_client(make_context(configured=False))
+        r = client.get("/api/health")
+        assert r.status_code == 200
+        assert r.json()["ok"] is True
+
+    def test_formulir_hanya_meminta_tiga_hal(self, make_context: Callable[..., Any]) -> None:
+        """UUID tidak diketik ulang — itu sumber salah ketik yang baru ketahuan
+        setelah data masuk atas nama kapal lain."""
+        client = make_client(make_context(configured=False))
+        html = client.get("/setup").text
+        for nama in ("central_url", "client_id", "secret"):
+            assert f'name="{nama}"' in html
+        assert "ship_id" not in html
+        assert "device_id" not in html
+
+    def test_setup_berhasil_meneruskan_masukan(self, make_context: Callable[..., Any]) -> None:
+        context = make_context(configured=False)
+        client = make_client(context)
+        r = client.post(
+            "/setup",
+            data={
+                "central_url": "https://pusat.test",
+                "client_id": "ship-071",
+                "secret": "rahasia",
+                "pin": "123456",
+            },
+            follow_redirects=False,
+        )
+        assert r.status_code == 303
+        assert context.provisioned[0]["client_id"] == "ship-071"
+        assert context.provisioned[0]["central_url"] == "https://pusat.test"
+
+    def test_pin_salah_ditolak_tanpa_menyentuh_apa_pun(
+        self, make_context: Callable[..., Any]
+    ) -> None:
+        """Console tidak punya autentikasi lain, dan saat setup ia harus bisa
+        dijangkau dari laptop teknisi di jaringan kapal."""
+        context = make_context(configured=False)
+        client = make_client(context)
+        r = client.post(
+            "/setup",
+            data={
+                "central_url": "https://pusat.test",
+                "client_id": "ship-071",
+                "secret": "rahasia",
+                "pin": "000000",
+            },
+            follow_redirects=False,
+        )
+        assert r.status_code == 303
+        assert "PIN" in r.headers["location"]
+        assert context.provisioned == [], "tidak boleh ada yang ditulis"
+
+    def test_kegagalan_mengembalikan_yang_sudah_diketik_tanpa_rahasia(
+        self, make_context: Callable[..., Any]
+    ) -> None:
+        """Mengetik ulang alamat pusat di tablet sambil berdiri di ruang mesin
+        itu menyiksa — tetapi rahasianya tidak boleh ikut ke bilah alamat."""
+        context = make_context(configured=False, fail={"provision"})
+        client = make_client(context)
+        r = client.post(
+            "/setup",
+            data={
+                "central_url": "https://pusat.test",
+                "client_id": "ship-071",
+                "secret": "rahasia-sekali",
+                "pin": "123456",
+            },
+            follow_redirects=False,
+        )
+        lokasi = r.headers["location"]
+        assert "pusat.test" in lokasi
+        assert "ship-071" in lokasi
+        assert "rahasia-sekali" not in lokasi
+
+    def test_perangkat_sudah_terpasang_tidak_dialihkan(
+        self, make_context: Callable[..., Any]
+    ) -> None:
+        client = make_client(make_context(configured=True))
+        assert client.get("/", follow_redirects=False).status_code == 200

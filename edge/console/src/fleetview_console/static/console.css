@@ -231,3 +231,42 @@ body {
 /* Sensor multi-field (GPS): setiap field di barisnya sendiri agar terbaca. */
 .multi { display: block; white-space: nowrap; }
 .multi .unit { display: inline-block; min-width: 2.5rem; text-align: left; }
+
+/* ---------------------------------------------------------------- setup
+ *
+ * Formulir dibuat besar dengan sengaja. Halaman ini dipakai teknisi sambil
+ * berdiri di ruang mesin, sering di tablet, kadang dengan sarung tangan —
+ * bukan di meja dengan tetikus.
+ */
+.form { display: grid; gap: 1.25rem; margin: 1rem 0; max-width: 32rem; }
+
+.field { display: block; }
+.field__label {
+  display: block;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  margin-bottom: 0.35rem;
+}
+.field__input {
+  width: 100%;
+  padding: 0.75rem;
+  font: inherit;
+  font-size: 1rem;          /* >=16px: mencegah iOS memperbesar saat fokus */
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  background: #fff;
+  color: var(--text);
+}
+.field__input:focus-visible {
+  outline: 2px solid var(--green-primary);
+  outline-offset: 1px;
+  border-color: var(--green-primary);
+}
+.field__hint {
+  display: block;
+  margin-top: 0.35rem;
+  font-size: 0.8125rem;
+  color: var(--text-muted);
+  line-height: 1.5;
+}
+.form .btn { padding: 0.75rem 1.25rem; font-size: 1rem; justify-self: start; }
