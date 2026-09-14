@@ -82,11 +82,26 @@ services:
       dockerfile: central/web/Dockerfile
     image: fleetview-central-web:${FLEETVIEW_IMAGE_TAG:-local}
     ports:
-      - "8080:80"
+      - "80:80"
+      - "443:443"
+    volumes:
+      - /etc/letsencrypt:/etc/letsencrypt:ro
+      - acme-challenge:/var/www/acme-challenge
     depends_on:
       api:
         condition: service_healthy
     restart: unless-stopped
+
+  certbot:
+    image: certbot/certbot:latest
+    volumes:
+      - /etc/letsencrypt:/etc/letsencrypt
+      - acme-challenge:/var/www/acme-challenge
+    entrypoint: ["/bin/sh", "-c"]
+    command: ["true"]
+
+volumes:
+  acme-challenge:
 
 secrets:
   postgres_password:

@@ -1,0 +1,6 @@
+[Unit]
+Description=Renewal sertifikat TLS Central Platform (Docker)
+
+[Service]
+Type=oneshot
+ExecStart=/opt/fleetview/src/deploy/scripts/certbot-renew.sh
