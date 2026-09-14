@@ -19,6 +19,6 @@ COPY central/web/nginx/fleetview-proxy-headers.conf /etc/nginx/fleetview-proxy-h
 RUN mkdir -p /var/www/acme-challenge
 
 HEALTHCHECK --interval=10s --timeout=3s --start-period=5s --retries=5 \
-    CMD ["wget", "--quiet", "--tries=1", "--spider", "http://127.0.0.1/api/health"]
+    CMD ["wget", "--quiet", "--tries=1", "--spider", "--no-check-certificate", "https://127.0.0.1/api/health"]
 
 EXPOSE 80
