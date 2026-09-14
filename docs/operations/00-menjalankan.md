@@ -311,10 +311,16 @@ lihat [01 §6](01-deployment.md#6-strategi-pembaruan).
 ## C1. Status dan kendali
 
 ```bash
-sudo systemctl status fleetview-central
-sudo systemctl restart fleetview-central
-sudo systemctl reload nginx          # setelah mengubah TLS atau rate limit
+docker compose -f docker-compose.prod.yml ps
+docker compose -f docker-compose.prod.yml restart api
+docker compose -f docker-compose.prod.yml exec proxy nginx -s reload  # setelah sertifikat TLS baru
 ```
+
+Reload cukup untuk sertifikat TLS yang baru diperbarui (dibaca lewat volume
+`/etc/letsencrypt`, di luar image). Mengubah rate limit di
+`central/web/nginx/fleetview.conf` tidak cukup dengan reload — konfigurasi itu
+ikut ter-bake ke dalam image `proxy` saat build, jadi butuh
+`docker compose -f docker-compose.prod.yml up -d --build proxy`.
 
 Central boleh mati sebentar. Kapal akan mencoba ulang sendiri dan tidak ada data
 yang hilang — itu inti desain offline-first. Yang **tidak** boleh adalah central
@@ -334,16 +340,20 @@ Dua endpoint, dan perbedaannya disengaja — lihat
 ## C3. Log
 
 ```bash
-sudo journalctl -u fleetview-central -f
-sudo journalctl -u fleetview-central -o cat | jq 'select(.level=="error")'
-sudo tail -f /var/log/nginx/access.log
+docker compose -f docker-compose.prod.yml logs -f api
+docker compose -f docker-compose.prod.yml logs --no-log-prefix api | jq 'select(.level=="error")'
+docker compose -f docker-compose.prod.yml logs -f proxy
 ```
+
+Log nginx tidak lagi berkas di host — image `proxy` (nginx resmi) menulis
+access/error log ke stdout/stderr container, jadi diambil lewat `docker compose
+logs proxy`, sama seperti `api`.
 
 ## C4. Administrasi armada
 
 ```bash
-sudo -u fleetview /opt/fleetview/venv/bin/fleetview-admin ship list
-sudo -u fleetview /opt/fleetview/venv/bin/fleetview-admin credential list
+docker compose -f docker-compose.prod.yml exec api fleetview-admin ship list
+docker compose -f docker-compose.prod.yml exec api fleetview-admin credential list
 ```
 
 Menambah kapal: [07](07-ship-onboarding.md). Menonaktifkan: [08](08-ship-decommissioning.md).
@@ -357,7 +367,7 @@ curl -s https://fleetview.example.com/api/v1/ships \
 
 # Ruang disk — kegagalan yang menghentikan ingest untuk SELURUH armada
 sudo systemctl status fleetview-diskwatch
-df -h /var/lib/influxdb
+df -h /var/lib/fleetview/influx-data
 ```
 
 ## C6. Cadangan
@@ -372,13 +382,24 @@ Detail dan uji pemulihan: [04](04-backup.md).
 
 ## C7. Memutakhirkan
 
-Urutannya penting: **cadangkan, migrasi, baru tukar rilis.**
+Urutannya penting: **cadangkan, lalu tukar rilis.** Migrasi sekarang berjalan
+otomatis lewat job `migrate` sebelum container `api` start (lihat
+[03 §4](03-central-deployment.md#4-migrasi-skema)) — bukan lagi langkah
+`alembic upgrade head` manual yang terpisah.
 
 ```bash
 sudo systemctl start fleetview-backup.service
-cd /opt/fleetview/current/central/api
-sudo -u fleetview /opt/fleetview/venv/bin/alembic upgrade head
-sudo systemctl restart fleetview-central
+
+cd /opt/fleetview/src
+sudo git fetch --tags && sudo git checkout <tag baru>
+VERSION=$(git describe --tags --always)
+sudo sed -i "s/^FLEETVIEW_IMAGE_TAG=.*/FLEETVIEW_IMAGE_TAG=${VERSION}/" .env
+
+docker compose -f docker-compose.prod.yml build --build-arg VERSION="${VERSION}"
+docker compose -f docker-compose.prod.yml up -d
+
+docker compose -f docker-compose.prod.yml exec api \
+  alembic -c /app/alembic.ini current
 ```
 
 Catat nomor revisi skema setiap kali deploy. Rollback kode itu aman; rollback

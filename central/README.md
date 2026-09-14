@@ -21,12 +21,21 @@ menambah biaya operasional tanpa manfaat.
 
 ## Yang berjalan di pusat
 
+Seluruh stack produksi diorkestrasi lewat Docker Compose
+(`docker-compose.prod.yml`) — lihat
+[03 — Deployment Central Platform](../docs/operations/03-central-deployment.md):
+
 ```
-fleetview-central-api    satu proses, stateless, bisa diskalakan jadi N replika
-postgres                 metadata relational
-influxdb                 telemetry time-series
-nginx / Caddy            menyajikan hasil build web/ — file statis, bukan proses Node
+docker compose -f docker-compose.prod.yml    orkestrasi seluruh stack produksi
+├── api        fleetview-central-api, stateless, bisa diskalakan jadi N replika
+├── proxy      nginx: TLS, rate-limit, file statis web/, reverse proxy ke api
+├── postgres   metadata relational
+├── influxdb   telemetry time-series
+└── migrate    job alembic, jalan sekali tiap deploy sebelum api start
 ```
+
+Untuk pengembangan lokal (bukan produksi), lihat
+[00 §A](../docs/operations/00-menjalankan.md#a--di-komputer-sendiri):
 
 ```bash
 uv run fleetview-central               # API
