@@ -49,8 +49,8 @@ services:
     entrypoint: []
     command: ["alembic", "-c", "/app/alembic.ini", "upgrade", "head"]
     env_file:
-      - /etc/fleetview/central.env
-      - /etc/fleetview/secrets.env
+      - ${FLEETVIEW_CENTRAL_ENV:-/etc/fleetview/central.env}
+      - ${FLEETVIEW_SECRETS_ENV:-/etc/fleetview/secrets.env}
     depends_on:
       postgres:
         condition: service_healthy
@@ -61,8 +61,8 @@ services:
       dockerfile: central/api/Dockerfile
     image: fleetview-central-api:${FLEETVIEW_IMAGE_TAG:-local}
     env_file:
-      - /etc/fleetview/central.env
-      - /etc/fleetview/secrets.env
+      - ${FLEETVIEW_CENTRAL_ENV:-/etc/fleetview/central.env}
+      - ${FLEETVIEW_SECRETS_ENV:-/etc/fleetview/secrets.env}
     depends_on:
       migrate:
         condition: service_completed_successfully
@@ -85,7 +85,7 @@ services:
       - "80:80"
       - "443:443"
     volumes:
-      - /etc/letsencrypt:/etc/letsencrypt:ro
+      - ${FLEETVIEW_CERTS_DIR:-/etc/letsencrypt}:/etc/letsencrypt:ro
       - acme-challenge:/var/www/acme-challenge
     depends_on:
       api:
@@ -95,7 +95,7 @@ services:
   certbot:
     image: certbot/certbot:latest
     volumes:
-      - /etc/letsencrypt:/etc/letsencrypt
+      - ${FLEETVIEW_CERTS_DIR:-/etc/letsencrypt}:/etc/letsencrypt
       - acme-challenge:/var/www/acme-challenge
     entrypoint: ["/bin/sh", "-c"]
     command: ["true"]
@@ -105,8 +105,8 @@ volumes:
 
 secrets:
   postgres_password:
-    file: /etc/fleetview/secrets/postgres_password.txt
+    file: ${FLEETVIEW_POSTGRES_PASSWORD_FILE:-/etc/fleetview/secrets/postgres_password.txt}
   influx_password:
-    file: /etc/fleetview/secrets/influx_password.txt
+    file: ${FLEETVIEW_INFLUX_PASSWORD_FILE:-/etc/fleetview/secrets/influx_password.txt}
   influx_token:
-    file: /etc/fleetview/secrets/influx_token.txt
+    file: ${FLEETVIEW_INFLUX_TOKEN_FILE:-/etc/fleetview/secrets/influx_token.txt}

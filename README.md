@@ -39,6 +39,98 @@ API docs   http://localhost:8000/docs
 Rinciannya, termasuk cara menjalankan sebagian saja:
 [Cara Menjalankan](docs/operations/00-menjalankan.md).
 
+## Coba central via Docker (produksi-mirip)
+
+Mencoba central berjalan persis seperti di server produksi (bukan `make dev`
+yang pakai proses `uv run` langsung) — cocok untuk verifikasi sebelum deploy
+sungguhan. Beda dari `make dev`: di sini Postgres, InfluxDB, api, DAN proxy
+(nginx + dashboard + TLS) semuanya container, bukan hanya Postgres+InfluxDB.
+
+Butuh [Docker](https://docs.docker.com/engine/install/) dengan Compose
+plugin, dan `openssl` (sudah terpasang di macOS/Linux) untuk membuat
+sertifikat TLS percobaan. Tidak butuh `uv`/`pnpm`/`sudo` — semua build
+terjadi di dalam container, dan semua path yang di produksi mengarah ke
+`/etc/fleetview` atau `/etc/letsencrypt` (butuh root) di sini dialihkan ke
+folder temp lewat environment variable.
+
+```bash
+# 1. Siapkan konfigurasi lokal (nilai dummy, JANGAN dipakai di produksi)
+mkdir -p /tmp/fleetview-central-try/certs/live/fleetview
+cat > /tmp/fleetview-central-try/central.env <<'EOF'
+FLEETVIEW_ENVIRONMENT=production
+FLEETVIEW_LOG_FORMAT=json
+FLEETVIEW_HOST=0.0.0.0
+FLEETVIEW_PORT=8000
+FLEETVIEW_INFLUX_URL=http://influxdb:8086
+FLEETVIEW_INFLUX_ORG=fleetview
+FLEETVIEW_INFLUX_BUCKET=telemetry
+FLEETVIEW_CORS_ORIGINS=["https://localhost"]
+FLEETVIEW_TRUST_PROXY_HEADERS=true
+EOF
+cat > /tmp/fleetview-central-try/secrets.env <<'EOF'
+FLEETVIEW_POSTGRES_DSN=postgresql+asyncpg://fleetview:coba-saja-12345@postgres:5432/fleetview
+FLEETVIEW_INFLUX_TOKEN=coba-saja-token-12345678901234567890
+FLEETVIEW_JWT_SECRET=coba-saja-jwt-secret-minimal-32-karakter-xx
+EOF
+echo "coba-saja-12345" > /tmp/fleetview-central-try/postgres_password.txt
+echo "coba-saja-12345" > /tmp/fleetview-central-try/influx_password.txt
+echo "coba-saja-token-12345678901234567890" > /tmp/fleetview-central-try/influx_token.txt
+
+# Sertifikat self-signed, hanya untuk percobaan lokal — browser/curl akan
+# bilang "tidak tepercaya", itu wajar untuk sertifikat self-signed
+openssl req -x509 -nodes -days 1 -newkey rsa:2048 \
+  -keyout /tmp/fleetview-central-try/certs/live/fleetview/privkey.pem \
+  -out /tmp/fleetview-central-try/certs/live/fleetview/fullchain.pem \
+  -subj "/CN=localhost"
+
+# Alihkan path yang di produksi butuh root ke folder temp di atas
+export FLEETVIEW_CENTRAL_ENV=/tmp/fleetview-central-try/central.env
+export FLEETVIEW_SECRETS_ENV=/tmp/fleetview-central-try/secrets.env
+export FLEETVIEW_DATA_DIR=/tmp/fleetview-central-try/data
+export FLEETVIEW_CERTS_DIR=/tmp/fleetview-central-try/certs
+export FLEETVIEW_POSTGRES_PASSWORD_FILE=/tmp/fleetview-central-try/postgres_password.txt
+export FLEETVIEW_INFLUX_PASSWORD_FILE=/tmp/fleetview-central-try/influx_password.txt
+export FLEETVIEW_INFLUX_TOKEN_FILE=/tmp/fleetview-central-try/influx_token.txt
+
+# 2. Build + jalankan seluruh stack
+docker compose -f docker-compose.prod.yml build
+docker compose -f docker-compose.prod.yml up -d postgres influxdb migrate api proxy
+
+# 3. Tunggu semua sehat, lalu cek
+docker compose -f docker-compose.prod.yml ps
+curl -sk https://localhost/api/health
+
+# 4. Buat operator pertama untuk masuk dashboard (kata sandi diminta
+#    interaktif, minimal 12 karakter — tidak pernah lewat argumen shell)
+docker compose -f docker-compose.prod.yml exec api \
+  fleetview-admin user add --username operator --roles admin
+
+# 5. Buka dashboard (sertifikat self-signed, browser akan minta konfirmasi)
+open https://localhost
+```
+
+`proxy` bisa tampil **"unhealthy"** di `docker compose ... ps` walau
+sebenarnya berfungsi normal — healthcheck bawaan image itu mengetes
+`http://.../api/health`, yang di-redirect 301 ke `https://` oleh nginx.
+Kosmetik saja; patokan sebenarnya adalah hasil `curl` di atas dan berhasil
+login di dashboard.
+
+Menghentikan dan membersihkan (jalankan di sesi shell yang sama, supaya
+variabel `FLEETVIEW_*` di atas masih ter-`export` — kalau membuka terminal
+baru, `export` ulang dulu agar tidak diam-diam mengarah ke `/etc/fleetview`
+produksi):
+
+```bash
+docker compose -f docker-compose.prod.yml down -v
+rm -rf /tmp/fleetview-central-try
+```
+
+`down -v` menghapus data test ini sepenuhnya — jangan jalankan terhadap
+compose file yang menunjuk data produksi sungguhan.
+
+Untuk deploy produksi sungguhan (domain nyata, TLS Let's Encrypt, backup
+terjadwal): [docs/operations/03-central-deployment.md](docs/operations/03-central-deployment.md).
+
 ## Struktur
 
 Ini **monorepo** berisi **dua sistem yang di-deploy terpisah**, plus kode yang
