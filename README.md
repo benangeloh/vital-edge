@@ -5,10 +5,36 @@ Platform telemetry IoT offline-first untuk armada 70+ kapal.
 Data selalu tersimpan di kapal terlebih dahulu. Internet bukan dependency —
 LAN, Wi-Fi, seluler, dan USB semuanya hanya transport yang bisa saling menggantikan.
 
-## Mulai cepat
+## Dua sistem — baca README masing-masing
 
-**Device baru untuk development** (laptop/PC macOS atau Linux) — mensimulasikan
-seluruh sistem (central + kapal + dashboard) di satu mesin:
+Ini **monorepo**: dua sistem yang di-deploy **terpisah**, ke tempat yang
+berbeda, dengan cara yang berbeda pula. Root README ini hanya ringkasan dan
+titik masuk — untuk arsitektur dan alasan desain tiap sistem, baca README-nya
+sendiri-sendiri:
+
+| Sistem | Di mana jalan | Baca dulu | Cara install/deploy |
+|---|---|---|---|
+| **Edge** | Tiap kapal — Raspberry Pi, ×70 | [edge/README.md](edge/README.md) — satu proses systemd (collector + storage + sync + console UI), 24/7, sering tanpa internet | [Provisioning Raspberry Pi](docs/operations/02-provisioning-raspberry-pi.md) → [Onboarding kapal](docs/operations/07-ship-onboarding.md) |
+| **Central** | Satu server pusat | [central/README.md](central/README.md) — modular monolith, menerima data seluruh armada, dashboard operator | [Deployment central via Docker](docs/operations/03-central-deployment.md) |
+
+Keduanya memakai `shared/` (format wire, logging, error, waktu) — lihat
+[shared/README.md](shared/README.md) — supaya format data tidak pernah
+menyimpang antara kapal dan pusat meski di-deploy terpisah.
+
+Satu hal yang perlu diketahui sebelum instalasi Edge di kapal sungguhan:
+**jalur baca dari LP-A104 belum terkonfirmasi** — lihat
+[status hardware](docs/hardware/LP-A104.md). Sampai itu beres, provisioning
+Raspberry Pi tetap bisa dijalankan, tapi akuisisi sensor memakai adapter
+simulator, bukan hardware sungguhan.
+
+## Mulai cepat (development — simulasi KEDUA sistem di satu mesin)
+
+Bagian ini **bukan** cara instalasi Edge atau Central yang sungguhan — kalau
+device ini akan jadi Raspberry Pi kapal atau server pusat produksi, pakai
+tabel di atas, bukan langkah di bawah ini.
+
+Untuk laptop/PC development (macOS atau Linux) yang mensimulasikan seluruh
+sistem (central + kapal + dashboard) di satu mesin:
 
 1. Pasang [uv](https://docs.astral.sh/uv/), [pnpm](https://pnpm.io/installation)
    (lewat `corepack enable`), dan [Docker](https://docs.docker.com/engine/install/)
@@ -33,23 +59,12 @@ API docs   http://localhost:8000/docs
 Rinciannya, termasuk cara menjalankan sebagian saja:
 [Cara Menjalankan](docs/operations/00-menjalankan.md).
 
-**Device baru yang BUKAN untuk development** — Raspberry Pi yang akan naik ke
-kapal sungguhan, atau server pusat produksi — jangan pakai `make dev` di atas.
-Itu untuk simulasi di satu mesin, bukan instalasi produksi. Ikuti dokumen
-instalasi yang sesuai:
+## Coba Central via Docker (produksi-mirip)
 
-| Device baru | Ikuti |
-|---|---|
-| Raspberry Pi di kapal | [Provisioning Raspberry Pi](docs/operations/02-provisioning-raspberry-pi.md), lalu [Onboarding kapal](docs/operations/07-ship-onboarding.md) |
-| Server pusat | [Deployment central via Docker](docs/operations/03-central-deployment.md) — atau coba dulu produksi-mirip di device manapun lewat bagian di bawah |
-
-Satu hal yang perlu diketahui sebelum instalasi di kapal sungguhan: **jalur
-baca dari LP-A104 belum terkonfirmasi** — lihat
-[status hardware](docs/hardware/LP-A104.md). Sampai itu beres, provisioning
-Raspberry Pi tetap bisa dijalankan, tapi akuisisi sensor memakai adapter
-simulator, bukan hardware sungguhan.
-
-## Coba central via Docker (produksi-mirip)
+Ini khusus **Central** — untuk mencoba stack produksi (bukan simulasi dev di
+atas) di device manapun sebelum deploy sungguhan. Edge tidak punya padanan
+Docker: lihat tabel di bagian "Dua sistem" di atas untuk cara mencoba/memasang
+Edge.
 
 Mencoba central berjalan persis seperti di server produksi (bukan `make dev`
 yang pakai proses `uv run` langsung) — cocok untuk verifikasi sebelum deploy
@@ -169,9 +184,6 @@ central/    SISTEM 2 → di-deploy ke pusat
 tools/      Simulator, CLI import USB (Phase 2 & 4)
 docs/       Arsitektur dan catatan hardware
 ```
-
-Tiap folder sistem punya README-nya sendiri:
-[shared/](shared/README.md) · [edge/](edge/README.md) · [central/](central/README.md)
 
 ## Yang berjalan di mana
 
