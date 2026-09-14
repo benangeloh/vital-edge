@@ -5,21 +5,15 @@ Platform telemetry IoT offline-first untuk armada 70+ kapal.
 Data selalu tersimpan di kapal terlebih dahulu. Internet bukan dependency —
 LAN, Wi-Fi, seluler, dan USB semuanya hanya transport yang bisa saling menggantikan.
 
-## Status
-
-**Phase 10 — Pengerasan produksi, selesai.** Seluruh jalur berfungsi ujung ke
-ujung: akuisisi, penyimpanan lokal, sync, ingest central, dashboard, Console
-kapal, dan artefak deployment.
-
-Satu hal menghambat commissioning di kapal sungguhan: **jalur baca dari LP-A104
-belum terkonfirmasi** — lihat [status hardware](docs/hardware/LP-A104.md).
-Sampai itu beres, akuisisi dijalankan dengan adapter simulator.
-
-Lihat [peta jalan](docs/architecture/06-roadmap.md) untuk yang tersisa.
-
 ## Mulai cepat
 
-Butuh [uv](https://docs.astral.sh/uv/), [pnpm](https://pnpm.io/), dan Docker.
+**Device baru untuk development** (laptop/PC macOS atau Linux) — mensimulasikan
+seluruh sistem (central + kapal + dashboard) di satu mesin:
+
+1. Pasang [uv](https://docs.astral.sh/uv/), [pnpm](https://pnpm.io/installation)
+   (lewat `corepack enable`), dan [Docker](https://docs.docker.com/engine/install/)
+   dengan Compose plugin — belum ada satupun di device ini, pasang ketiganya dulu.
+2. Clone repo ini, lalu:
 
 ```bash
 make setup     # sekali saja: dependency Python + Node
@@ -38,6 +32,22 @@ API docs   http://localhost:8000/docs
 
 Rinciannya, termasuk cara menjalankan sebagian saja:
 [Cara Menjalankan](docs/operations/00-menjalankan.md).
+
+**Device baru yang BUKAN untuk development** — Raspberry Pi yang akan naik ke
+kapal sungguhan, atau server pusat produksi — jangan pakai `make dev` di atas.
+Itu untuk simulasi di satu mesin, bukan instalasi produksi. Ikuti dokumen
+instalasi yang sesuai:
+
+| Device baru | Ikuti |
+|---|---|
+| Raspberry Pi di kapal | [Provisioning Raspberry Pi](docs/operations/02-provisioning-raspberry-pi.md), lalu [Onboarding kapal](docs/operations/07-ship-onboarding.md) |
+| Server pusat | [Deployment central via Docker](docs/operations/03-central-deployment.md) — atau coba dulu produksi-mirip di device manapun lewat bagian di bawah |
+
+Satu hal yang perlu diketahui sebelum instalasi di kapal sungguhan: **jalur
+baca dari LP-A104 belum terkonfirmasi** — lihat
+[status hardware](docs/hardware/LP-A104.md). Sampai itu beres, provisioning
+Raspberry Pi tetap bisa dijalankan, tapi akuisisi sensor memakai adapter
+simulator, bukan hardware sungguhan.
 
 ## Coba central via Docker (produksi-mirip)
 
