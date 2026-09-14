@@ -23,6 +23,7 @@ dist/
 # (docs/operations/00-menjalankan.md bagian A)
 .devdata/
 !.env.example
+!.env.prod.example
 *.pem
 *.key
 # Runbook operasional IKUT masuk repo: install.sh menyalinnya ke perangkat, dan
