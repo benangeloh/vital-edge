@@ -914,7 +914,6 @@ Prasyarat: Docker Engine + Compose plugin ([docs resmi](https://docs.docker.com/
     cd /opt/fleetview/src && sudo git checkout <tag rilis>
     sudo ./deploy/scripts/install-central.sh fleetview.example.com admin@example.com
 ```
-```
 
 - [ ] **Step 2: Ganti bagian "3. Konfigurasi"**
 
