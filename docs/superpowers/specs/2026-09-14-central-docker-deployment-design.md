@@ -70,10 +70,11 @@ produksi (beda dari dev, yang publish 5432/8086 untuk akses lokal).
 ### 1. `central/api/Dockerfile`
 
 Multi-stage:
-- **builder**: base `python:3.12-slim`, install `uv`, `uv sync` /
-  `pip install` paket `shared/common`, `shared/contracts`, `central/api` ke
-  virtualenv.
-- **runtime**: base `python:3.12-slim` juga (bukan distroless — perlu
+- **builder**: base `python:3.11-slim` (sama dengan `.python-version` root
+  dan Raspberry Pi OS Bookworm — konsistensi versi yang sudah jadi aturan
+  tak tertulis di project ini), install `uv`, `uv pip install` paket lokal
+  `shared/common`, `shared/contracts`, `central/api` ke virtualenv.
+- **runtime**: base `python:3.11-slim` juga (bukan distroless — perlu
   `alembic` CLI untuk job migrate pakai image yang sama), copy venv dari
   builder, copy source `central/api`. User non-root (`fleetview`, uid tetap
   supaya cocok dengan ownership bind mount). `ENTRYPOINT` tidak di-hardcode
