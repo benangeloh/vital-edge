@@ -1,0 +1,14 @@
+.venv
+.git
+node_modules
+central/web/node_modules
+central/web/dist
+.devdata
+.pytest_cache
+.ruff_cache
+.mypy_cache
+__pycache__
+*.pyc
+.coverage
+coverage.xml
+htmlcov
