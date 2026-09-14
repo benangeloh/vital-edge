@@ -8,7 +8,11 @@
 #     mengirim ulang backlog-nya menghasilkan duplikat. Ukurannya kecil, jadi
 #     dicadangkan penuh setiap hari.
 #   - InfluxDB menyimpan telemetry. Besar, dan sebagian besar isinya masih ada
-#     di kapal selama masa tenggang outbox. Dicadangkan dengan cara inkremental.
+#     di kapal selama masa tenggang outbox. Dicadangkan penuh (bukan
+#     inkremental) setiap hari — `influx backup` di InfluxDB 2.x tidak
+#     punya flag rentang waktu (--start/--end) sama sekali, jadi tidak ada
+#     cara mencadangkan "hanya 48 jam terakhir" lewat CLI ini. Lihat blok
+#     komentar InfluxDB di bawah untuk detail.
 set -euo pipefail
 
 BACKUP_DIR="${FLEETVIEW_BACKUP_DIR:-/var/backups/fleetview}"

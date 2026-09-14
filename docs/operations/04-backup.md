@@ -9,7 +9,7 @@ dibangun kembali dari tempat lain?**
 | Outbox yang sudah ter-ACK | central | tidak |
 | InfluxDB kapal | central (setelah ACK) | tidak |
 | PostgreSQL central | tidak ada di mana pun | **Ya, harian** |
-| InfluxDB central | sebagian di kapal, selama masa tenggang | **Ya, inkremental + snapshot mingguan** |
+| InfluxDB central | sebagian di kapal, selama masa tenggang | **Ya, penuh setiap hari** |
 | Konfigurasi kapal | repo + inventaris | **Ya, harian** |
 | Rahasia | penerbit kredensial | tidak — sengaja |
 
@@ -67,21 +67,44 @@ kapal, kredensial perangkat, dan **ledger batch**. Ledger itu yang membuat
 pengiriman ulang tidak menggandakan data — kehilangannya tidak menghilangkan
 telemetry, tetapi membuat kapal yang mengirim ulang backlog menghasilkan duplikat.
 
-**InfluxDB** dicadangkan inkremental, hanya 48 jam terakhir. Cadangan penuh
-telemetry armada berukuran terabyte dan tidak praktis harian.
+**InfluxDB** dicadangkan **penuh setiap hari**, bukan inkremental. `influx
+backup` di InfluxDB 2.x (CLI yang dibawa image `influxdb:2.7-alpine`) tidak
+punya flag rentang waktu (`--start`/`--end`) sama sekali — dikonfirmasi lewat
+`influx backup --help` di container dan dokumentasi resmi InfluxDB v2. Filter
+rentang waktu hanya ada di perintah lain yang sama sekali berbeda,
+`influxd inspect export-lp` (ekspor line-protocol mentah, hasilnya **tidak
+bisa** dipulihkan lewat `influx restore`), jadi bukan pengganti yang valid
+untuk pipeline backup/restore ini.
 
-### Snapshot mingguan
+**Implikasi biaya operasional — baca ini sebelum kaget lihat grafik disk:**
+setiap cadangan harian sekarang menyalin **seluruh bucket yang masih
+tersimpan**, bukan cuma 48 jam terakhir seperti desain semula. Dengan retensi
+`DOCKER_INFLUXDB_INIT_RETENTION` 365 hari (lihat
+[`docker-compose.prod.yml`](../../docker-compose.prod.yml)) dan skala armada
+yang didokumentasikan di
+[03-central-deployment.md](03-central-deployment.md) (~10 GB/hari tersimpan
+pasca-kompresi, ~3,6 TB pada hari ke-365), cadangan InfluxDB **hari ke-365**
+bisa berukuran mendekati 3,6 TB — dan setiap harinya, seluruh bucket sebesar
+itu disalin ulang dari nol, bukan delta. Ini jauh lebih besar dari beban
+disk/waktu/bandwidth yang diasumsikan rancangan awal ("48 jam terakhir"), dan
+akan terus membesar seiring bucket terisi menuju batas retensi. Pantau
+`/var/backups/fleetview/` dan `FLEETVIEW_BACKUP_KEEP_DAYS` (retensi lokal
+cadangan, default 30 hari) dengan asumsi ini, dan pertimbangkan menurunkan
+`FLEETVIEW_BACKUP_KEEP_DAYS` atau menaikkan kapasitas disk backup jika ukuran
+bucket bertumbuh signifikan. Mekanisme inkremental yang sesungguhnya (mis.
+`influxd inspect export-lp` dengan jalur restore terpisah) adalah desain yang
+lebih invasif dan di luar cakupan naskah ini — dicatat sebagai kandidat kerja
+lanjutan, bukan diimplementasikan di sini.
 
-Yang inkremental saja tidak cukup untuk pemulihan penuh. Tambahkan di crontab
-root:
+### Replikasi offsite
 
-```cron
-0 3 * * 0 influx backup /var/backups/fleetview/weekly/$(date -u +\%Y\%m\%d) --bucket telemetry
-```
-
-Simpan snapshot mingguan **di luar server**. Cadangan yang berada di disk yang
-sama dengan datanya tidak melindungi dari kegagalan yang paling mungkin terjadi:
-disk itu sendiri.
+Karena cadangan harian sekarang sudah **penuh**, tidak perlu lagi cron
+terpisah yang menjalankan `influx backup` mingguan hanya demi mendapatkan
+salinan penuh — cadangan harian sudah memberikannya. Yang masih dibutuhkan
+adalah menyalin hasilnya **ke luar server**: cadangan yang berada di disk
+yang sama dengan datanya tidak melindungi dari kegagalan yang paling mungkin
+terjadi, yaitu disk itu sendiri. Jadwalkan replikasi berkala (mis. mingguan)
+dari seluruh direktori cadangan:
 
 ```bash
 rsync -a --delete /var/backups/fleetview/ backup-host:/srv/fleetview-backups/
@@ -117,7 +140,7 @@ jumlah baris ledger, dan jumlah record outbox masuk akal dibanding produksi.
 | | RPO | RTO |
 |---|---|---|
 | PostgreSQL central | 24 jam | 1 jam |
-| InfluxDB central | 24 jam (7 hari untuk data lama) | 4 jam |
+| InfluxDB central | 24 jam | 4 jam |
 | Outbox kapal | 24 jam | 30 menit |
 
 RPO 24 jam untuk PostgreSQL bisa diperketat dengan WAL archiving bila kebutuhan
