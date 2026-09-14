@@ -43,9 +43,11 @@ pg_restore --list "${dest}/postgres.dump" > /dev/null
 # sama sekali (dikonfirmasi lewat `influx backup --help` di container dan
 # dokumentasi resmi InfluxDB v2 — filter rentang waktu hanya ada di
 # `influxd inspect export-lp`, perintah ekspor line-protocol yang berbeda dan
-# tidak bisa dipulihkan lewat `influx restore`). Data lama tetap dilindungi
-# oleh snapshot mingguan (lihat docs/operations/04-backup.md) dan, untuk
-# jendela terbaru, oleh outbox di kapal yang belum dipangkas.
+# tidak bisa dipulihkan lewat `influx restore`). Karena cadangan harian ini
+# sudah penuh (bukan inkremental), tidak ada lapisan "snapshot mingguan"
+# terpisah lagi — durabilitas tambahan datang dari replikasi offsite (lihat
+# docs/operations/04-backup.md, bagian "Replikasi offsite") dan, untuk
+# jendela terbaru, dari outbox di kapal yang belum dipangkas.
 docker compose -f "${COMPOSE_FILE}" exec -T influxdb \
   influx backup /tmp/influx-backup \
   --bucket "${INFLUX_BUCKET}" \
