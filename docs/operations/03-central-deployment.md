@@ -200,13 +200,22 @@ Setup sertifikat awal lewat `deploy/scripts/certbot-init.sh`:
 sudo ./deploy/scripts/certbot-init.sh fleetview.example.com admin@example.com
 ```
 
-Skrip ini mengganti `server_name _;` di `central/web/nginx/fleetview.conf`
-dengan domain sungguhan, menyalakan container `proxy`, meminta sertifikat lewat
-HTTP-01 webroot challenge (container `certbot`, berbagi volume
-`acme-challenge` dengan `proxy` lewat `/var/www/acme-challenge`) dengan nama
-sertifikat tetap `fleetview` (`--cert-name fleetview` — cocok dengan path
-`ssl_certificate` yang di-hardcode di `fleetview.conf`), lalu me-reload nginx
-di dalam container.
+`fleetview.conf` tidak lagi diubah oleh skrip ini — kedua server block di
+sana sudah memakai `server_name _;` (catch-all), yang melayani host
+satu-domain ini identik dengan menyebut domainnya secara eksplisit, jadi tidak
+ada substitusi teks yang diperlukan (dan tidak ada risiko konflik dengan `git
+checkout <tag>` saat upgrade). Sebelum menyalakan `proxy`, skrip membuat
+sertifikat self-signed sekali-pakai di path yang sama dengan yang
+di-hardcode di `ssl_certificate`/`ssl_certificate_key` — TANPA ini nginx
+menolak start sama sekali karena berkas sertifikatnya belum ada, port 80 tidak
+pernah terbuka, dan ACME challenge di bawah tidak pernah bisa dijawab (langkah
+ini no-op bila sertifikat asli sudah ada). Skrip lalu menyalakan container
+`proxy`, meminta sertifikat asli lewat HTTP-01 webroot challenge (container
+`certbot`, berbagi volume `acme-challenge` dengan `proxy` lewat
+`/var/www/acme-challenge`) dengan nama sertifikat tetap `fleetview`
+(`--cert-name fleetview` — cocok dengan path `ssl_certificate` yang
+di-hardcode di `fleetview.conf`, menimpa sertifikat self-signed di atas), lalu
+me-reload nginx di dalam container.
 
 Konfigurasi nginx memisahkan pembatasan laju menjadi tiga zona karena tiga bidang
 API ini punya pola beban yang sangat berbeda: `ingest` longgar dengan burst besar
@@ -241,10 +250,13 @@ docker compose -f docker-compose.prod.yml up -d
 docker compose -f docker-compose.prod.yml ps    # semua "healthy"
 ```
 
-Service `migrate` dan `certbot` tidak punya status "healthy" — keduanya job
-sekali-jalan (`migrate` menjalankan migrasi lalu keluar, `certbot` di sini
-hanya placeholder untuk dipanggil lewat `run --rm`, lihat §5) dan akan tampil
-`Exited (0)` di `ps`. Itu normal. Yang harus "healthy" adalah `postgres`,
+Service `migrate` tidak punya status "healthy" — job sekali-jalan (menjalankan
+migrasi lalu keluar) dan akan tampil `Exited (0)` di `ps`. Itu normal. Service
+`certbot` punya `profiles: ["tools"]`, jadi ia **tidak ikut dibuat sama
+sekali** oleh `up -d` polos — tidak akan muncul di `ps` di atas. Ia hanya
+muncul saat dipanggil eksplisit lewat `docker compose run --rm certbot ...`
+(lihat §5), yang sudah jadi cara `certbot-init.sh`/`certbot-renew.sh`
+memanggilnya. Yang harus "healthy" dari `up -d` polos adalah `postgres`,
 `influxdb`, `api`, dan `proxy`.
 
 Timer periodik lain (cadangan, pemantauan disk) tetap lewat systemd di host,
@@ -257,6 +269,13 @@ sudo cp deploy/systemd/fleetview-backup.* deploy/systemd/fleetview-diskwatch.* \
 sudo systemctl daemon-reload
 sudo systemctl enable --now fleetview-backup.timer fleetview-diskwatch.timer
 ```
+
+`install-central.sh` sudah menambahkan user `fleetview` ke grup `docker` (dan
+membuat `/var/backups/fleetview` dengan ownership yang sesuai) supaya
+`backup-central.sh` bisa memanggil `docker compose exec` tanpa root penuh.
+Keanggotaan grup `docker` secara efektif setara akses root di host — trade-off
+keamanan yang disengaja demi kesederhanaan operasional, bukan celah yang
+terlewat.
 
 `fleetview-central.service` (unit systemd lama yang menjalankan aplikasi
 langsung di host lewat venv) tidak lagi dipakai sama sekali — proses `api`

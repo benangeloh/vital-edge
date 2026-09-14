@@ -74,6 +74,11 @@ services:
       timeout: 3s
       retries: 5
       start_period: 10s
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "5"
     restart: unless-stopped
 
   proxy:
@@ -90,15 +95,25 @@ services:
     depends_on:
       api:
         condition: service_healthy
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "5"
     restart: unless-stopped
 
   certbot:
     image: certbot/certbot:latest
+    # profiles excludes this service from a bare `up`/`up -d` — it only runs
+    # when named explicitly (`docker compose run --rm certbot ...`, as
+    # certbot-init.sh and certbot-renew.sh already do) or via `--profile
+    # tools`. Without this, a bare `up -d` would create an argument-less
+    # certbot container that exits non-zero (nothing to do without a
+    # subcommand) every time the stack starts.
+    profiles: ["tools"]
     volumes:
       - ${FLEETVIEW_CERTS_DIR:-/etc/letsencrypt}:/etc/letsencrypt
       - acme-challenge:/var/www/acme-challenge
-    entrypoint: ["/bin/sh", "-c"]
-    command: ["true"]
 
 volumes:
   acme-challenge:

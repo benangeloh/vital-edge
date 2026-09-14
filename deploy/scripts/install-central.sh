@@ -15,6 +15,27 @@ sudo mkdir -p "${DATA_DIR}/postgres-data" "${DATA_DIR}/influx-data"
 sudo chown -R 70:70 "${DATA_DIR}/postgres-data"
 sudo chown -R 1000:1000 "${DATA_DIR}/influx-data"
 
+# User sistem yang menjalankan job backup/diskwatch lewat systemd (lihat
+# deploy/systemd/fleetview-backup.service dan §3 di
+# docs/operations/03-central-deployment.md). Dibuat di sini secara idempotent
+# (`|| true`) supaya urutan aman apakah operator sudah membuatnya manual di
+# §3 atau belum.
+sudo useradd --system --shell /usr/sbin/nologin fleetview || true
+
+# backup-central.sh (dijalankan sebagai user "fleetview" lewat systemd)
+# memanggil `docker compose exec`, yang butuh akses ke socket Docker daemon.
+# Keanggotaan grup docker secara efektif setara root (siapa pun di grup ini
+# bisa me-mount filesystem host lewat container) -- trade-off keamanan yang
+# disengaja demi kesederhanaan operasional; lihat catatan di
+# docs/operations/03-central-deployment.md dekat bagian setup cadangan.
+sudo usermod -aG docker fleetview
+
+# /var/backups di kebanyakan distro root-owned 0755, jadi user "fleetview"
+# (non-root, tanpa sudo) tidak bisa membuat subdirektori cadangannya sendiri
+# di sana tanpa ini.
+sudo mkdir -p /var/backups/fleetview
+sudo chown fleetview:fleetview /var/backups/fleetview
+
 sudo install -d -m 0750 /etc/fleetview/secrets
 
 # .env di sini (bukan /etc/fleetview/central.env) — file ini dibaca Docker

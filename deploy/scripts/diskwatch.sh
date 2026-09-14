@@ -8,7 +8,7 @@ set -euo pipefail
 
 WARN_PCT="${FLEETVIEW_DISK_WARN_PCT:-75}"
 CRIT_PCT="${FLEETVIEW_DISK_CRIT_PCT:-90}"
-PATHS="${FLEETVIEW_DISK_PATHS:-/var/lib/fleetview/postgres-data /var/lib/fleetview/influx-data /var/backups/fleetview}"
+PATHS="${FLEETVIEW_DISK_PATHS:-/var/lib/fleetview/postgres-data /var/lib/fleetview/influx-data /var/backups/fleetview /var/lib/docker}"
 
 status=0
 for path in ${PATHS}; do

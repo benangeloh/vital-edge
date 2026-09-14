@@ -34,8 +34,12 @@ docker compose -f "${COMPOSE_FILE}" exec -T postgres \
   pg_dump -Fc -U "${PGUSER}" -d "${PGDATABASE}" > "${dest}/postgres.dump"
 
 # Verifikasi isinya sekarang. pg_dump bisa sukses menghasilkan berkas yang tidak
-# bisa dibaca kembali bila disk penuh di tengah jalan.
-pg_restore --list "${dest}/postgres.dump" > /dev/null
+# bisa dibaca kembali bila disk penuh di tengah jalan. Dijalankan DI DALAM
+# container postgres (bukan di host) -- host tidak lagi punya paket
+# postgresql-15 terpasang sejak alur Docker ini, jadi tidak ada binary
+# pg_restore di host untuk dipanggil langsung.
+docker compose -f "${COMPOSE_FILE}" exec -T postgres \
+  pg_restore --list < "${dest}/postgres.dump" > /dev/null
 
 # --- InfluxDB ---------------------------------------------------------------
 # Cadangan penuh bucket, bukan inkremental: `influx backup` di InfluxDB 2.x
