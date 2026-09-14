@@ -7,6 +7,6 @@ User=fleetview
 Group=fleetview
 EnvironmentFile=/etc/fleetview/central.env
 EnvironmentFile=/etc/fleetview/secrets.env
-ExecStart=/opt/fleetview/current/deploy/scripts/backup-central.sh
+ExecStart=/opt/fleetview/src/deploy/scripts/backup-central.sh
 Nice=10
 IOSchedulingClass=idle

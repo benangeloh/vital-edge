@@ -258,16 +258,6 @@ sudo systemctl daemon-reload
 sudo systemctl enable --now fleetview-backup.timer fleetview-diskwatch.timer
 ```
 
-> **Perlu diperbaiki sebelum baris di atas benar-benar dijalankan di
-> produksi:** per saat dokumen ini ditulis, `fleetview-backup.service` dan
-> `fleetview-diskwatch.service` masih berisi
-> `ExecStart=/opt/fleetview/current/deploy/scripts/...` — jalur symlink rilis
-> lama yang **tidak** dibuat oleh alur Docker ini (§1–2: repo di-clone langsung
-> ke `/opt/fleetview/src`, tanpa symlink `current`). Ubah `ExecStart` di kedua
-> unit itu menjadi `/opt/fleetview/src/deploy/scripts/...` — pola yang sama
-> seperti `fleetview-certbot-renew.service`, yang sudah benar — sebelum
-> meng-`enable` timer-nya, atau job cadangan/pemantauan disk akan gagal diam-diam.
-
 `fleetview-central.service` (unit systemd lama yang menjalankan aplikasi
 langsung di host lewat venv) tidak lagi dipakai sama sekali — proses `api`
 sekarang dikelola oleh Docker Compose (`restart: unless-stopped`), bukan

@@ -10,4 +10,4 @@ Description=Pemantauan ruang disk FleetView
 
 [Service]
 Type=oneshot
-ExecStart=/opt/fleetview/current/deploy/scripts/diskwatch.sh
+ExecStart=/opt/fleetview/src/deploy/scripts/diskwatch.sh
