@@ -53,6 +53,14 @@ terjadi di dalam container, dan semua path yang di produksi mengarah ke
 `/etc/fleetview` atau `/etc/letsencrypt` (butuh root) di sini dialihkan ke
 folder temp lewat environment variable.
 
+Urutan start otomatis (tidak perlu ditunggu manual — `depends_on` di
+`docker-compose.prod.yml` yang mengatur): `postgres`+`influxdb` nyala dan
+sehat lebih dulu → `migrate` menjalankan migrasi skema lalu keluar dengan
+kode 0 → `api` baru start setelah `migrate` sukses → `proxy` (nginx, TLS,
+reverse proxy) baru start setelah `api` sehat. Kalau `migrate` gagal, `api`
+tidak akan pernah start — ini yang mencegah kode baru berjalan di atas skema
+lama.
+
 ```bash
 # 1. Siapkan konfigurasi lokal (nilai dummy, JANGAN dipakai di produksi)
 mkdir -p /tmp/fleetview-central-try/certs/live/fleetview
@@ -109,11 +117,9 @@ docker compose -f docker-compose.prod.yml exec api \
 open https://localhost
 ```
 
-`proxy` bisa tampil **"unhealthy"** di `docker compose ... ps` walau
-sebenarnya berfungsi normal — healthcheck bawaan image itu mengetes
-`http://.../api/health`, yang di-redirect 301 ke `https://` oleh nginx.
-Kosmetik saja; patokan sebenarnya adalah hasil `curl` di atas dan berhasil
-login di dashboard.
+Kalau langkah 3 berhasil (`curl` mengembalikan `"ok":true` dan
+`docker compose ... ps` menunjukkan keempat service `healthy`), setup sudah
+benar — tinggal buat operator (langkah 4) lalu buka dashboard (langkah 5).
 
 Menghentikan dan membersihkan (jalankan di sesi shell yang sama, supaya
 variabel `FLEETVIEW_*` di atas masih ter-`export` — kalau membuka terminal
