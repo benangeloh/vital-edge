@@ -55,6 +55,39 @@ services:
       postgres:
         condition: service_healthy
 
+  api:
+    build:
+      context: .
+      dockerfile: central/api/Dockerfile
+    image: fleetview-central-api:${FLEETVIEW_IMAGE_TAG:-local}
+    env_file:
+      - /etc/fleetview/central.env
+      - /etc/fleetview/secrets.env
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      influxdb:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/health', timeout=3)"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+    restart: unless-stopped
+
+  proxy:
+    build:
+      context: .
+      dockerfile: central/web/Dockerfile
+    image: fleetview-central-web:${FLEETVIEW_IMAGE_TAG:-local}
+    ports:
+      - "8080:80"
+    depends_on:
+      api:
+        condition: service_healthy
+    restart: unless-stopped
+
 secrets:
   postgres_password:
     file: /etc/fleetview/secrets/postgres_password.txt
