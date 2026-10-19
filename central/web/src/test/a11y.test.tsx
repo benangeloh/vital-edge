@@ -69,7 +69,7 @@ describe("aksesibilitas", () => {
   it("navigasi tanpa pelanggaran", async () => {
     const violations = await checkA11y(
       <MemoryRouter>
-        <Sidebar />
+        <Sidebar collapsed={false} onToggleCollapsed={() => {}} />
       </MemoryRouter>,
     );
     expect(violations.map((v) => `${v.id}: ${v.help}`)).toEqual([]);

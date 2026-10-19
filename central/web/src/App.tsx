@@ -1,4 +1,4 @@
-import { Suspense, lazy, useState } from "react";
+import { Suspense, lazy, useEffect, useState } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Route, Routes } from "react-router-dom";
 import { Sidebar } from "@/components/shell/Sidebar";
@@ -41,21 +41,43 @@ const client = new QueryClient({
   },
 });
 
+const SIDEBAR_COLLAPSED_KEY = "fleetview.sidebarCollapsed";
+
+function readSidebarCollapsed(): boolean {
+  try {
+    return localStorage.getItem(SIDEBAR_COLLAPSED_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
 function Shell() {
   const [search, setSearch] = useState("");
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(readSidebarCollapsed);
   const { data: ships } = useFleet();
   const { data: alerts } = useAlerts();
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(SIDEBAR_COLLAPSED_KEY, sidebarCollapsed ? "1" : "0");
+    } catch {
+      // Preferensi tampilan saja — aman diabaikan kalau storage tidak tersedia.
+    }
+  }, [sidebarCollapsed]);
 
   const summary = ships ? summarise(ships) : undefined;
   const attentionCount = ships ? needsAttention(ships).length : 0;
   const openAlerts = (alerts ?? []).filter((a) => !a.acknowledged_at).length;
 
   return (
-    <div className="app">
+    <div className={sidebarCollapsed ? "app app--sidebar-collapsed" : "app"}>
       <a href="#main" className="skip-link">
         Lompat ke konten utama
       </a>
-      <Sidebar />
+      <Sidebar
+        collapsed={sidebarCollapsed}
+        onToggleCollapsed={() => setSidebarCollapsed((c) => !c)}
+      />
       <div className="app__body">
         <TopBar
           summary={summary}

@@ -8,6 +8,10 @@
   display: grid;
   grid-template-columns: var(--sidebar-width) 1fr;
   min-height: 100vh;
+  transition: grid-template-columns 220ms var(--ease);
+}
+.app--sidebar-collapsed {
+  grid-template-columns: var(--sidebar-width-collapsed) 1fr;
 }
 
 .app__body {
@@ -34,58 +38,80 @@
   color: rgba(255, 255, 255, 0.72);
   display: flex;
   flex-direction: column;
-  padding: var(--space-5) 0;
+  padding: 0 0 var(--space-5);
   position: sticky;
   top: 0;
   height: 100vh;
   overflow-y: auto;
 }
 
+/* Header merek — panel putih penuh lebar, terpisah tegas dari rail hijau
+   tua di bawahnya. Bukan sekadar logo mengambang di atas hijau. */
 .sidebar__brand {
+  /* Tinggi disamakan persis dengan topbar, dan border-bottom-nya sama —
+     hasilnya satu garis lurus tak putus melintasi seluruh lebar aplikasi,
+     bukan dua elemen terpisah yang kebetulan sama-sama putih. */
+  height: var(--topbar-height);
+  background: var(--white);
+  color: var(--green-deep);
   display: flex;
   align-items: center;
   gap: var(--space-3);
-  padding: 0 var(--space-5) var(--space-6);
+  padding: 0 var(--space-5);
+  border-bottom: var(--border-thin);
+  overflow: hidden;
+  flex-shrink: 0;
 }
 .sidebar__mark {
-  width: 1.5rem;
-  height: 1.5rem;
-  border-radius: 2px;
-  background: linear-gradient(135deg, var(--green-bright), var(--green-primary));
+  width: 1.75rem;
+  height: 1.75rem;
+  object-fit: contain;
   flex-shrink: 0;
 }
 .sidebar__wordmark {
-  color: var(--white);
+  color: var(--green-deep);
   font-size: var(--text-md);
   font-weight: 600;
   letter-spacing: -0.01em;
   line-height: 1.1;
   display: flex;
   flex-direction: column;
+  white-space: nowrap;
+  overflow: hidden;
+  max-width: 10rem;
+  opacity: 1;
+  transition: opacity 120ms var(--ease), max-width 220ms var(--ease);
 }
+.sidebar--collapsed .sidebar__wordmark { opacity: 0; max-width: 0; }
 .sidebar__sub {
   font-size: var(--text-2xs);
   font-weight: 500;
   letter-spacing: 0.14em;
-  color: var(--green-bright);
+  /* green-primary, bukan green-bright — green-bright hanya ~2.5:1 di atas
+     putih (lihat catatan token warna), gagal WCAG untuk teks kecil. */
+  color: var(--green-primary);
 }
 
 .sidebar__list {
   list-style: none;
   margin: 0;
-  padding: 0 var(--space-3);
+  padding: var(--space-4) var(--space-3) 0;
   display: flex;
   flex-direction: column;
   gap: 1px;
 }
 
 .navlink {
-  display: block;
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
   padding: var(--space-2) var(--space-3);
   border-radius: var(--radius);
   color: inherit;
   text-decoration: none;
   font-size: var(--text-sm);
+  white-space: nowrap;
+  overflow: hidden;
   border-left: 2px solid transparent;
   transition: background var(--duration) var(--ease), color var(--duration) var(--ease);
 }
@@ -99,6 +125,45 @@
   color: var(--white);
   font-weight: 500;
 }
+.navlink__icon {
+  width: 1.15rem;
+  height: 1.15rem;
+  flex-shrink: 0;
+}
+.navlink__label {
+  overflow: hidden;
+  max-width: 12rem;
+  opacity: 1;
+  transition: opacity 120ms var(--ease), max-width 220ms var(--ease);
+}
+.sidebar--collapsed .navlink__label { opacity: 0; max-width: 0; }
+
+/* ---------- Sidebar diciutkan ---------- */
+/* Label tidak dihapus dari DOM — hanya terpotong oleh overflow:hidden seiring
+   lebar rail menyempit (digerakkan oleh transisi grid-template-columns di
+   .app), jadi transisinya terasa seperti bergeser, bukan berkedip. */
+.sidebar--collapsed .sidebar__brand { justify-content: center; padding-inline: var(--space-2); }
+.sidebar--collapsed .sidebar__list { padding-inline: var(--space-2); }
+.sidebar--collapsed .navlink { justify-content: center; padding-inline: 0; }
+
+.sidebar__toggle {
+  margin: var(--space-4) var(--space-3) 0;
+  margin-top: auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-2);
+  background: transparent;
+  border: var(--border-thin);
+  border-color: rgba(255, 255, 255, 0.14);
+  border-radius: var(--radius);
+  color: rgba(255, 255, 255, 0.6);
+  cursor: pointer;
+  transition: background var(--duration) var(--ease), color var(--duration) var(--ease);
+}
+.sidebar__toggle:hover { background: rgba(255, 255, 255, 0.08); color: var(--white); }
+.sidebar__toggle-icon { width: 1rem; height: 1rem; transition: transform 220ms var(--ease); }
+.sidebar__toggle-icon--open { transform: rotate(180deg); }
 
 /* ---------- Top bar ---------- */
 .topbar {
@@ -591,47 +656,199 @@
 .error-state__msg { color: var(--status-crit); margin: 0 0 var(--space-3); }
 
 /* ---------- Login ---------- */
+/* Splash bermerek penuh — beda dari instrumen dashboard di baliknya. Foto
+   pelabuhan dipilih supaya operator langsung mengenali konteks: armada
+   sungguhan, bukan ilustrasi generik. Peta titik-titik Nusantara dan bentuk
+   sudut hijau sudah dipanggang di dalam foto latar, jadi tidak perlu lapisan
+   dekorasi CSS tambahan. */
 .login {
+  position: relative;
   min-height: 100vh;
-  display: grid;
-  place-items: center;
-  background: var(--green-deep);
-  padding: var(--space-5);
-}
-.login__card {
-  width: min(23rem, 100%);
-  background: var(--white);
-  border-radius: var(--radius-lg);
-  padding: var(--space-6);
   display: flex;
   flex-direction: column;
-  gap: var(--space-4);
+  overflow: hidden;
+  color: var(--white);
 }
-.login__brand {
+.login__bg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  z-index: 0;
+}
+
+.login__topbar,
+.login__main,
+.login__footer {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  max-width: 84rem;
+  margin: 0 auto;
+}
+
+.login__topbar {
   display: flex;
-  align-items: center;
-  gap: var(--space-3);
-  font-weight: 600;
-  color: var(--green-deep);
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-5);
+  padding: var(--space-6) var(--space-7);
 }
+.login__brand-lockup { display: flex; align-items: flex-start; gap: var(--space-3); }
+.login__brand-icon { width: 2.75rem; height: 2.75rem; object-fit: contain; flex-shrink: 0; filter: drop-shadow(0 1px 3px rgba(0, 0, 0, 0.4)); }
+.login__brand-name { font-size: var(--text-lg); font-weight: 700; letter-spacing: -0.01em; text-shadow: 0 1px 3px rgba(0, 0, 0, 0.4); }
 .login__sub {
   margin-left: var(--space-2);
   font-size: var(--text-2xs);
-  letter-spacing: 0.14em;
-  color: var(--green-primary);
+  font-weight: 600;
+  letter-spacing: 0.28em;
+  color: var(--green-bright);
+  vertical-align: middle;
 }
-.login__title { margin: 0; font-size: var(--text-lg); font-weight: 600; }
+.login__brand-tagline {
+  margin: var(--space-1) 0 0;
+  font-size: var(--text-xs);
+  color: rgba(255, 255, 255, 0.75);
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
+}
+.login__motto {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  flex-shrink: 0;
+}
+.login__motto-text {
+  text-align: right;
+  font-size: var(--text-2xs);
+  font-weight: 600;
+  letter-spacing: 0.16em;
+  line-height: 1.7;
+  color: rgba(255, 255, 255, 0.85);
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
+}
+.login__motto-rule { width: 3rem; height: 1px; background: rgba(255, 255, 255, 0.5); flex-shrink: 0; }
+
+.login__main {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-6) var(--space-7);
+}
+
+/* Satu panel utuh, dibelah dua secara internal — bukan dua elemen mengambang
+   dengan jarak yang berubah-ubah. Marginnya jadi selalu simetris (panel ini
+   dipusatkan sebagai satu unit) di ukuran layar berapa pun. */
+.login__panel {
+  display: flex;
+  width: min(100%, 60rem);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  box-shadow: 0 32px 64px -16px rgba(1, 43, 36, 0.55);
+}
+.login__panel-brand {
+  flex: 1 1 52%;
+  background: var(--green-deep);
+  color: var(--white);
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: clamp(var(--space-6), 4vw, var(--space-8));
+}
+.login__headline {
+  margin: 0;
+  font-size: clamp(1.5rem, 2.4vw, 2.25rem);
+  font-weight: 800;
+  line-height: 1.2;
+  letter-spacing: -0.01em;
+}
+.login__headline-accent { color: var(--green-bright); }
+.login__headline-rule {
+  display: block;
+  width: 3rem;
+  height: 3px;
+  margin: var(--space-4) 0;
+  background: var(--green-bright);
+}
+.login__panel-copy {
+  max-width: 22rem;
+  margin: 0;
+  font-size: var(--text-sm);
+  line-height: 1.6;
+  color: rgba(255, 255, 255, 0.8);
+}
+
+.login__panel-form {
+  flex: 1 1 48%;
+  background: var(--white);
+  color: var(--text);
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: var(--space-4);
+  padding: clamp(var(--space-6), 4vw, var(--space-8));
+}
+.login__card-brand {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-weight: 600;
+  color: var(--green-deep);
+}
+.login__mark { width: 2rem; height: 2rem; object-fit: contain; }
+.login__sub--dark { color: var(--green-primary); text-shadow: none; }
+.login__title { margin: 0; font-size: var(--text-lg); font-weight: 700; letter-spacing: -0.01em; }
 .login__field { display: flex; flex-direction: column; gap: var(--space-1); font-size: var(--text-xs); color: var(--text-muted); }
 .login__field input {
-  padding: var(--space-2) var(--space-3);
+  padding: var(--space-3);
   font: inherit;
   font-size: var(--text-base);
   color: var(--text);
   border: var(--border-thin);
   border-radius: var(--radius);
+  transition: border-color var(--duration) var(--ease), box-shadow var(--duration) var(--ease);
 }
-.login__field input:focus { border-color: var(--green-primary); }
-.login__error { margin: 0; color: var(--status-crit); font-size: var(--text-sm); }
+.login__field input:hover { border-color: var(--text-faint); }
+.login__field input:focus {
+  outline: none;
+  border-color: var(--green-primary);
+  box-shadow: 0 0 0 3px rgba(52, 133, 76, 0.15);
+}
+.login__error {
+  margin: 0;
+  padding: var(--space-2) var(--space-3);
+  background: var(--status-crit-bg);
+  color: var(--status-crit);
+  font-size: var(--text-sm);
+  border-radius: var(--radius);
+}
+.login__submit { padding-top: var(--space-3); padding-bottom: var(--space-3); }
+
+.login__footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-5);
+  padding: var(--space-5) var(--space-7);
+  font-size: var(--text-2xs);
+  font-weight: 600;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.75);
+}
+.login__footer-item { display: flex; align-items: center; gap: var(--space-4); text-shadow: 0 1px 3px rgba(0, 0, 0, 0.4); }
+.login__footer-item--end { flex-direction: row-reverse; }
+.login__footer-rule { width: 2.5rem; height: 1px; background: rgba(255, 255, 255, 0.5); flex-shrink: 0; }
+
+@media (max-width: 60rem) {
+  .login__motto,
+  .login__footer { display: none; }
+  .login__topbar { padding: var(--space-5); }
+  .login__main { padding: var(--space-5); }
+  .login__panel { flex-direction: column; }
+  .login__panel-copy { max-width: none; }
+}
 
 /* ---------- Responsif ---------- */
 /* Desktop-first: dashboard utama dipakai di komputer kantor. Layar sempit
@@ -648,10 +865,36 @@
     padding: var(--space-3);
     overflow-x: auto;
   }
-  .sidebar__brand { padding: 0 var(--space-2) 0 0; }
-  .sidebar__list { flex-direction: row; padding: 0; }
-  .navlink { border-left: none; border-bottom: 2px solid transparent; white-space: nowrap; }
+  .sidebar__brand,
+  .sidebar--collapsed .sidebar__brand {
+    height: auto;
+    padding: 0 var(--space-2) 0 0;
+    justify-content: flex-start;
+    background: transparent;
+    border-bottom: none;
+  }
+  .sidebar__wordmark,
+  .sidebar__sub { color: var(--white); }
+  .sidebar__sub { color: var(--green-bright); }
+  /* Preferensi ciut disimpan lintas sesi, tetapi di rail horizontal ini
+     kontrolnya disembunyikan — jadi label tetap dipaksa tampak supaya
+     pengguna tidak terjebak dalam mode ikon-saja tanpa cara membukanya. */
+  .sidebar--collapsed .sidebar__wordmark,
+  .sidebar--collapsed .navlink__label { opacity: 1; max-width: none; }
+  .sidebar__list,
+  .sidebar--collapsed .sidebar__list { flex-direction: row; padding: 0; }
+  .navlink,
+  .sidebar--collapsed .navlink {
+    border-left: none;
+    border-bottom: 2px solid transparent;
+    white-space: nowrap;
+    justify-content: flex-start;
+    padding: var(--space-2) var(--space-3);
+  }
   .navlink--active { border-left-color: transparent; border-bottom-color: var(--green-bright); }
+  /* Rail sudah jadi bar horizontal yang bisa digulir — mode ciut tidak
+     relevan di sini, jadi kontrolnya disembunyikan. */
+  .sidebar__toggle { display: none; }
   .content, .topbar { padding-left: var(--space-4); padding-right: var(--space-4); }
   .fleet-pulse { display: none; }
   .charts { grid-template-columns: 1fr; }
