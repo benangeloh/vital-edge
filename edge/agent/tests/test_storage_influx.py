@@ -21,6 +21,7 @@ from fleetview_edge.storage import (
     StorageState,
     StorageUnavailableError,
 )
+from fleetview_edge.storage.influx import _parse_annotated_csv, _rfc3339_to_micros
 
 SHIP = UUID("11111111-1111-1111-1111-111111111111")
 DEVICE = UUID("22222222-2222-2222-2222-222222222222")
@@ -266,6 +267,93 @@ class TestEnsureReady:
             raise httpx.ConnectError("mati")
 
         await _store(handler).ensure_ready()  # tidak boleh melempar
+
+
+_CSV_DUA_TITIK = (
+    "#datatype,string,long,dateTime:RFC3339,dateTime:RFC3339,dateTime:RFC3339,"
+    "double,string,string,string\n"
+    "#group,false,false,true,true,false,false,true,true,true\n"
+    "#default,_result,,,,,,,,\n"
+    ",result,table,_start,_stop,_time,_value,_field,_measurement,sensor_id\n"
+    ",,0,2024-01-01T00:00:00Z,2024-01-01T01:00:00Z,"
+    "2024-01-01T00:59:58.123456789Z,742.5,value,rpm,me_port_rpm\n"
+    ",,0,2024-01-01T00:00:00Z,2024-01-01T01:00:00Z,"
+    "2024-01-01T00:59:57.000000000Z,741.0,value,rpm,me_port_rpm\n"
+)
+
+
+class TestPratinjau:
+    """Fitur ini ada supaya teknisi tidak perlu membuka InfluxDB langsung di
+    :8086 hanya untuk memastikan datanya benar-benar tersimpan."""
+
+    async def test_query_flux_terkirim_dan_csv_terurai(self) -> None:
+        seen: dict[str, object] = {}
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            seen["body"] = request.content.decode()
+            seen["content_type"] = request.headers.get("content-type")
+            seen["accept"] = request.headers.get("accept")
+            return httpx.Response(200, text=_CSV_DUA_TITIK)
+
+        rows = await _store(handler).query_recent(limit=20)
+
+        assert seen["content_type"] == "application/vnd.flux"
+        assert seen["accept"] == "application/csv"
+        assert 'from(bucket: "telemetry")' in str(seen["body"])
+
+        assert len(rows) == 2
+        assert rows[0]["sensor_id"] == "me_port_rpm"
+        assert rows[0]["metric"] == "rpm"
+        assert rows[0]["field"] == "value"
+        assert rows[0]["nilai"] == "742.5"
+        # Terurut terbaru dulu, bukan urutan CSV apa adanya.
+        assert rows[0]["waktu_us"] > rows[1]["waktu_us"]
+
+    async def test_limit_dipotong_di_python(self) -> None:
+        """Flux sudah diminta membatasi, tetapi Python memotong lagi setelah
+        pengurutan ulang — lihat catatan di docstring `query_recent`."""
+        rows = await _store(lambda _r: httpx.Response(200, text=_CSV_DUA_TITIK)).query_recent(
+            limit=1
+        )
+        assert len(rows) == 1
+        assert rows[0]["sensor_id"] == "me_port_rpm"
+
+    async def test_tidak_terjangkau_dilaporkan_bisa_diulang(self) -> None:
+        def handler(_r: httpx.Request) -> httpx.Response:
+            raise httpx.ConnectError("refused")
+
+        with pytest.raises(StorageUnavailableError):
+            await _store(handler).query_recent()
+
+    async def test_query_ditolak_tidak_diulang(self) -> None:
+        store = _store(lambda _r: httpx.Response(400, text="invalid flux syntax"))
+        with pytest.raises(StorageRejectedError):
+            await store.query_recent()
+
+    def test_urai_csv_menangani_banyak_tabel(self) -> None:
+        """`group()` tidak selalu bisa menyatukan measurement bertipe field
+        berbeda menjadi satu tabel — CSV-nya lantas berisi header berulang,
+        dipisah baris kosong."""
+        csv = (
+            ",a,b\n"
+            ",1,2\n"
+            "\n"
+            ",x,y,z\n"
+            ",7,8,9\n"
+        )
+        rows = _parse_annotated_csv(csv)
+        assert rows == [{"": "", "a": "1", "b": "2"}, {"": "", "x": "7", "y": "8", "z": "9"}]
+
+    def test_rfc3339_presisi_nano_dipotong_ke_mikro(self) -> None:
+        assert _rfc3339_to_micros("2024-01-01T00:59:58.123456789Z") == _rfc3339_to_micros(
+            "2024-01-01T00:59:58.123456Z"
+        )
+
+    def test_rfc3339_tanpa_akhiran_z_ditolak(self) -> None:
+        assert _rfc3339_to_micros("2024-01-01T00:59:58+07:00") is None
+
+    def test_rfc3339_kosong_ditolak(self) -> None:
+        assert _rfc3339_to_micros("") is None
 
 
 class TestKegagalanKonfigurasi:

@@ -13,6 +13,7 @@ saling bebas. InfluxDB yang sedang compaction tidak boleh membuat kapal buta.
 from __future__ import annotations
 
 import asyncio
+from typing import Any
 
 from fleetview_common import FleetViewError, get_logger
 from fleetview_contracts import TelemetryRecord
@@ -184,3 +185,12 @@ class StorageWriter:
                 "buffer_capacity": self._buffer.capacity,
             },
         )
+
+    async def query_recent(self, *, limit: int = 20) -> list[dict[str, Any]]:
+        """Titik data terbaru, diteruskan ke penyimpanan di baliknya.
+
+        Tidak lewat buffer — ini jalur BACA untuk pratinjau di Console, bukan
+        bagian dari jalur tulis yang tidak boleh gagal. `NotImplementedError`
+        dari backend yang tidak mendukungnya dibiarkan menjalar apa adanya.
+        """
+        return await self._store.query_recent(limit=limit)

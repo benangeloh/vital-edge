@@ -18,7 +18,8 @@ sama dengan protokol sync: 4xx berarti jangan diulang, 5xx dan 429 berarti boleh
 
 from __future__ import annotations
 
-from typing import Final
+from datetime import datetime
+from typing import Any, Final
 
 import httpx
 
@@ -277,3 +278,118 @@ class InfluxTelemetryStore(TelemetryStore):
     async def close(self) -> None:
         if self._owns_client:
             await self._client.aclose()
+
+    # -- pratinjau ------------------------------------------------------------
+
+    async def query_recent(self, *, limit: int = 20) -> list[dict[str, Any]]:
+        """Titik data terbaru di bucket, untuk pratinjau di Edge Console.
+
+        Query Flux lewat HTTP langsung — alasan sama seperti tulis dan
+        kesehatan: hanya butuh satu endpoint lagi, bukan client resmi yang
+        berat. `group()` menyatukan semua measurement/sensor ke satu tabel
+        supaya bisa diurutkan dan dibatasi lintas sensor sekaligus, bukan per
+        sensor; sisa pengurutan dan pemotongan dilakukan lagi di Python karena
+        Flux tidak selalu bisa menyatukan tabel yang skemanya berbeda menjadi
+        satu urutan waktu global.
+        """
+        flux = (
+            f'from(bucket: "{self._bucket}")'
+            " |> range(start: -1h)"
+            " |> group()"
+            ' |> sort(columns: ["_time"], desc: true)'
+            f" |> limit(n: {int(limit)})"
+        )
+        try:
+            response = await self._client.post(
+                "/api/v2/query",
+                params={"org": self._org},
+                content=flux,
+                headers={
+                    "Content-Type": "application/vnd.flux",
+                    "Accept": "application/csv",
+                },
+            )
+        except httpx.HTTPError as exc:
+            raise StorageUnavailableError(
+                f"InfluxDB tidak bisa dijangkau: {exc}", details={"url": self._url}
+            ) from exc
+
+        if response.status_code != 200:
+            detail = {"status": response.status_code, "body": response.text[:300]}
+            # Pemetaan yang sama dengan penulisan: 5xx dan 429 sementara, boleh
+            # dicoba lagi (mis. lewat muat ulang halaman); sisanya tidak akan
+            # membaik ditulis ulang, jadi apa adanya pun percuma diulang.
+            if response.status_code == 429 or response.status_code >= 500:
+                raise StorageUnavailableError(
+                    f"InfluxDB menolak sementara (HTTP {response.status_code})",
+                    details=detail,
+                )
+            raise StorageRejectedError(
+                f"query pratinjau ditolak (HTTP {response.status_code}): {response.text[:300]}",
+                details=detail,
+            )
+
+        baris: list[dict[str, Any]] = []
+        for record in _parse_annotated_csv(response.text):
+            waktu = _rfc3339_to_micros(record.get("_time", ""))
+            if waktu is None:
+                continue
+            baris.append(
+                {
+                    "waktu_us": waktu,
+                    "sensor_id": record.get("sensor_id") or "-",
+                    "metric": record.get("_measurement") or "-",
+                    "field": record.get("_field") or "-",
+                    "nilai": record.get("_value", "-"),
+                }
+            )
+
+        # Diurutkan lagi di sini: lihat catatan di docstring soal `group()`
+        # yang tidak selalu bisa menyatukan tabel bertipe field berbeda.
+        baris.sort(key=lambda r: r["waktu_us"], reverse=True)
+        return baris[:limit]
+
+
+def _parse_annotated_csv(text: str) -> list[dict[str, str]]:
+    """Urai CSV beranotasi InfluxDB seadanya, tanpa client resmi.
+
+    Formatnya: baris `#datatype`/`#group`/`#default` diabaikan, baris kosong
+    menandai tabel baru (dengan header barunya sendiri) — perlu ditangani
+    karena `group()` tetap bisa menghasilkan lebih dari satu tabel bila
+    skema field-nya berbeda antar measurement.
+    """
+    baris: list[dict[str, str]] = []
+    header: list[str] | None = None
+    for mentah in text.splitlines():
+        line = mentah.strip("\r")
+        if not line:
+            header = None
+            continue
+        if line.startswith("#"):
+            continue
+        sel = line.split(",")
+        if header is None:
+            header = sel
+            continue
+        if len(sel) != len(header):
+            continue
+        baris.append(dict(zip(header, sel, strict=False)))
+    return baris
+
+
+def _rfc3339_to_micros(value: str) -> int | None:
+    """Ubah timestamp RFC3339 InfluxDB (selalu UTC, akhiran `Z`) ke epoch mikrodetik.
+
+    InfluxDB CSV memberi presisi nanodetik (9 digit pecahan); `datetime` Python
+    hanya menerima hingga mikrodetik, jadi tiga digit terakhir dipotong.
+    """
+    text = value.strip()
+    if not text.endswith("Z"):
+        return None
+    tubuh, _, pecahan = text[:-1].partition(".")
+    pecahan = (pecahan + "000000")[:6]
+    try:
+        dt = datetime.fromisoformat(f"{tubuh}.{pecahan}+00:00")
+    except ValueError:
+        return None
+    return int(dt.timestamp() * 1_000_000)

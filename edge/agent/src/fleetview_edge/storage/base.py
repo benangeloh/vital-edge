@@ -5,6 +5,7 @@ from __future__ import annotations
 import abc
 from dataclasses import dataclass, field
 from enum import StrEnum
+from typing import Any
 
 from fleetview_common import StorageError
 from fleetview_contracts import TelemetryRecord
@@ -128,6 +129,16 @@ class TelemetryStore(abc.ABC):
     @abc.abstractmethod
     async def close(self) -> None:
         """Lepaskan sumber daya. Idempoten, tidak melempar."""
+
+    async def query_recent(self, *, limit: int = 20) -> list[dict[str, Any]]:
+        """Titik data terbaru, untuk pratinjau di Edge Console.
+
+        Bukan bagian dari kontrak inti (tulis + kesehatan) — default tidak
+        didukung. Backend yang bisa membacanya kembali (InfluxDB) meng-override
+        ini; backend uji seperti in-memory sengaja tidak, karena tidak ada yang
+        membuka pratinjaunya secara visual.
+        """
+        raise NotImplementedError(f"{self.name} tidak mendukung pratinjau data")
 
     async def ensure_ready(self) -> None:
         """Siapkan penyimpanan (mis. buat bucket, terapkan retensi).
