@@ -24,9 +24,13 @@ class EdgeHealth(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     disk_used_percent: Annotated[float, Field(ge=0, le=100)]
-    memory_used_percent: Annotated[float, Field(ge=0, le=100)]
-    cpu_used_percent: Annotated[float, Field(ge=0, le=100)]
-    uptime_seconds: Annotated[int, Field(ge=0)]
+    memory_used_percent: Annotated[float, Field(ge=0, le=100)] | None = None
+    cpu_used_percent: Annotated[float, Field(ge=0, le=100)] | None = None
+    """Memori dan CPU None bila perangkat tidak bisa membacanya (mis. bukan Linux).
+    None berarti tidak diketahui, bukan nol: nol akan tampil seperti perangkat
+    menganggur padahal kita hanya belum tahu."""
+    uptime_seconds: Annotated[int, Field(ge=0)] | None = None
+    """None bila tidak terbaca. Mengirim 0 akan terlihat seperti baru restart."""
     collector_healthy: bool
     storage_healthy: bool
     protocol_link_healthy: bool

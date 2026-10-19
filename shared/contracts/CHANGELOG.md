@@ -20,6 +20,16 @@ Perubahan MAJOR menuntut central mendukung dua versi sekaligus sampai semua 70
 kapal selesai di-upgrade. Kapal bisa offline berminggu-minggu, jadi masa dukung
 ganda ini diukur dalam bulan, bukan hari.
 
+## Belum dirilis
+
+**MINOR, backward-compatible.** `EdgeHealth.memory_used_percent`,
+`cpu_used_percent`, dan `uptime_seconds` kini opsional (`null`). Perangkat non-Linux tidak punya
+`/proc`, dan mengirim 0 akan tampak seperti perangkat menganggur padahal nilainya
+tidak diketahui. Edge lama yang selalu mengirim angka tetap diterima.
+
+Urutan rollout: **deploy central lebih dulu**, baru edge. Central lama menolak
+`null` pada field ini.
+
 ## 1.0 — 2026-08-31
 
 Versi pertama. Model: `Reading`, `BatchEnvelope`, `BatchPayload`, `Ack`,

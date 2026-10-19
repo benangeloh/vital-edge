@@ -58,9 +58,10 @@ export interface SyncState {
 
 export interface EdgeHealth {
   disk_used_percent: number;
-  memory_used_percent: number;
-  cpu_used_percent: number;
-  uptime_seconds: number;
+  /** `null` bila perangkat tidak bisa membacanya; bukan nol. */
+  memory_used_percent: number | null;
+  cpu_used_percent: number | null;
+  uptime_seconds: number | null;
   collector_healthy: boolean;
   storage_healthy: boolean;
   protocol_link_healthy: boolean;

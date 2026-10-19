@@ -21,10 +21,18 @@
           "type": "boolean"
         },
         "cpu_used_percent": {
-          "maximum": 100,
-          "minimum": 0,
-          "title": "Cpu Used Percent",
-          "type": "number"
+          "anyOf": [
+            {
+              "maximum": 100,
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Cpu Used Percent"
         },
         "disk_used_percent": {
           "maximum": 100,
@@ -33,10 +41,18 @@
           "type": "number"
         },
         "memory_used_percent": {
-          "maximum": 100,
-          "minimum": 0,
-          "title": "Memory Used Percent",
-          "type": "number"
+          "anyOf": [
+            {
+              "maximum": 100,
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Memory Used Percent"
         },
         "protocol_link_healthy": {
           "title": "Protocol Link Healthy",
@@ -47,16 +63,21 @@
           "type": "boolean"
         },
         "uptime_seconds": {
-          "minimum": 0,
-          "title": "Uptime Seconds",
-          "type": "integer"
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Uptime Seconds"
         }
       },
       "required": [
         "disk_used_percent",
-        "memory_used_percent",
-        "cpu_used_percent",
-        "uptime_seconds",
         "collector_healthy",
         "storage_healthy",
         "protocol_link_healthy"
