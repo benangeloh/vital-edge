@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { TimeSeriesChart } from "@/components/charts/TimeSeriesChart";
+import { DeviceHealthPanel } from "@/components/health/DeviceHealthPanel";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { EmptyState, ErrorState, Field, Loading, Panel, Section } from "@/components/ui/Primitives";
 import { absoluteTime, compactNumber, relativeTime, shortId } from "@/lib/format";
@@ -210,6 +211,18 @@ export function ShipDetail() {
                 <EmptyState title="Belum ada data sinkronisasi" />
               )}
             </Panel>
+          </Section>
+        )}
+
+        {tab === "Kesehatan Perangkat" && (
+          <Section
+            title="Kondisi perangkat"
+            description="Dilaporkan kapal lewat heartbeat, bukan dibaca dari pusat."
+          >
+            <DeviceHealthPanel
+              health={sync?.edge_health ?? null}
+              lastHeartbeatAt={sync?.last_heartbeat_at ?? null}
+            />
           </Section>
         )}
 

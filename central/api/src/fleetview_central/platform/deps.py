@@ -16,15 +16,18 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from fleetview_central.platform.db import Database
 from fleetview_central.platform.influx import InfluxGateway
 from fleetview_central.platform.security import DevicePrincipal, TokenService, UserPrincipal
+from fleetview_central.settings import ApiSettings
 from fleetview_common import AuthError
 
 __all__ = [
+    "AppSettings",
     "CurrentDevice",
     "CurrentUser",
     "DbSession",
     "Influx",
     "get_db_session",
     "get_influx",
+    "get_settings",
 ]
 
 
@@ -36,6 +39,11 @@ def _database(request: Request) -> Database:
 def _tokens(request: Request) -> TokenService:
     tokens: TokenService = request.app.state.tokens
     return tokens
+
+
+def get_settings(request: Request) -> ApiSettings:
+    settings: ApiSettings = request.app.state.settings
+    return settings
 
 
 def get_influx(request: Request) -> InfluxGateway:
@@ -85,5 +93,6 @@ async def current_device(
 
 DbSession = Annotated[AsyncSession, Depends(get_db_session)]
 Influx = Annotated[InfluxGateway, Depends(get_influx)]
+AppSettings = Annotated[ApiSettings, Depends(get_settings)]
 CurrentUser = Annotated[UserPrincipal, Depends(current_user)]
 CurrentDevice = Annotated[DevicePrincipal, Depends(current_device)]

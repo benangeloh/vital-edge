@@ -11,7 +11,8 @@ from sqlalchemy import text
 
 from fleetview_central.http.envelope import success
 from fleetview_central.modules.ops.service import AlertService, AuditService
-from fleetview_central.platform.deps import CurrentUser, DbSession, Influx
+from fleetview_central.modules.ops.storage import StorageLevel, read_disk_usage
+from fleetview_central.platform.deps import AppSettings, CurrentUser, DbSession, Influx
 from fleetview_common import ValidationError
 
 router = APIRouter(prefix="/api/v1", tags=["ops"])
@@ -28,22 +29,55 @@ class CreateRule(BaseModel):
 
 
 @router.get("/health", summary="Kesehatan platform", tags=["health"])
-async def health(db: DbSession, influx: Influx) -> dict[str, Any]:
-    """Readiness sungguhan: memeriksa Postgres dan InfluxDB.
+async def health(db: DbSession, influx: Influx, settings: AppSettings) -> dict[str, Any]:
+    """Readiness sungguhan: memeriksa Postgres dan InfluxDB, plus pemakaian disk host.
 
     Berbeda dari `/api/health` yang tanpa dependency — endpoint itu harus tetap
     menjawab justru saat dependency sedang bermasalah.
+
+    Disk di level `warning` tidak mengubah status: ia perlu terlihat, tetapi
+    bukan alasan menyatakan platform rusak. Hanya `critical` yang membuatnya
+    `degraded`.
     """
     checks: dict[str, Any] = {}
+    postgres_bytes: int | None = None
     try:
         await db.execute(text("SELECT 1"))
         checks["postgres"] = "ok"
+        postgres_bytes = await _postgres_size(db)
     except Exception as exc:
         checks["postgres"] = f"gagal: {exc}"
 
     checks["influxdb"] = "ok" if await influx.healthy() else "gagal"
-    healthy = all(v == "ok" for v in checks.values())
-    return success({"status": "healthy" if healthy else "degraded", "checks": checks})
+
+    disk = read_disk_usage(
+        settings.health_disk_path,
+        warn=settings.disk_warn_percent,
+        critical=settings.disk_critical_percent,
+    )
+    healthy = all(v == "ok" for v in checks.values()) and (
+        disk is None or disk.level is not StorageLevel.CRITICAL
+    )
+    return success(
+        {
+            "status": "healthy" if healthy else "degraded",
+            "checks": checks,
+            "storage": {
+                "disk": disk.as_dict() if disk else None,
+                "postgres_bytes": postgres_bytes,
+            },
+        }
+    )
+
+
+async def _postgres_size(db: DbSession) -> int | None:
+    """Ukuran database aktif. Informasi tambahan: kegagalannya tidak boleh
+    mengubah hasil pemeriksaan konektivitas di atasnya."""
+    try:
+        result = await db.execute(text("SELECT pg_database_size(current_database())"))
+        return int(result.scalar_one())
+    except Exception:
+        return None
 
 
 @router.get("/alerts", summary="Daftar kejadian alert")

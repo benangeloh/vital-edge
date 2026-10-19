@@ -50,6 +50,20 @@ export interface SensorRow {
   last_seen_at: string | null;
 }
 
+/** Kondisi Edge Agent yang dilaporkan lewat heartbeat. */
+export interface EdgeHealth {
+  disk_used_percent: number;
+  /** `null` bila perangkat tidak bisa membacanya (mis. bukan Linux); bukan nol. */
+  memory_used_percent: number | null;
+  cpu_used_percent: number | null;
+  uptime_seconds: number | null;
+  collector_healthy: boolean;
+  storage_healthy: boolean;
+  protocol_link_healthy: boolean;
+  /** Positif = jam kapal mendahului server. `null` bila belum pernah tersambung. */
+  clock_skew_seconds: number | null;
+}
+
 export interface SyncStatus {
   ship_id: string;
   last_contiguous_sequence: number;
@@ -62,6 +76,12 @@ export interface SyncStatus {
   connection_state: ConnectionState;
   pending_estimate: number | null;
   last_batch_received_at: string | null;
+  /** `null` selama kapal belum pernah mengirim heartbeat. */
+  last_heartbeat_at: string | null;
+  agent_version: string | null;
+  active_transport: string | null;
+  oldest_pending_age_seconds: number | null;
+  edge_health: EdgeHealth | null;
 }
 
 export interface AlertEvent {
@@ -91,7 +111,25 @@ export interface TelemetryResponse {
   aggregate: string;
 }
 
+export type ServerStorageLevel = "ok" | "warning" | "critical";
+
+export interface DiskUsage {
+  path: string;
+  total_bytes: number;
+  used_bytes: number;
+  free_bytes: number;
+  used_percent: number;
+  level: ServerStorageLevel;
+}
+
+export interface HostStorage {
+  /** `null` bila server tidak bisa membaca partisinya. */
+  disk: DiskUsage | null;
+  postgres_bytes: number | null;
+}
+
 export interface SystemHealth {
   status: "healthy" | "degraded";
   checks: Record<string, string>;
+  storage?: HostStorage;
 }

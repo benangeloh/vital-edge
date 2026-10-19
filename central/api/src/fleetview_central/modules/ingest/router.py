@@ -17,6 +17,7 @@ from pydantic import BaseModel
 
 from fleetview_central.http.envelope import success
 from fleetview_central.modules.fleet.service import FleetService
+from fleetview_central.modules.ingest.health_view import heartbeat_view
 from fleetview_central.modules.ingest.models import ShipSyncState
 from fleetview_central.modules.ingest.service import IngestService
 from fleetview_central.platform.deps import CurrentDevice, DbSession, Influx
@@ -168,5 +169,6 @@ async def ship_sync_status(ship_id: UUID, db: DbSession, influx: Influx) -> dict
                 if row and row.last_batch_received_at
                 else None
             ),
+            **heartbeat_view(row),
         }
     )

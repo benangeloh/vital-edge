@@ -1,0 +1,49 @@
+/* ---------- Meter pemakaian (disk, memori, CPU) ---------- */
+.meters {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
+  gap: var(--space-5);
+  margin-bottom: var(--space-5);
+}
+
+.meter { display: grid; gap: var(--space-2); }
+
+.meter__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+.meter__label { font-weight: 600; }
+.meter__value { font-size: var(--text-sm); }
+
+.meter__track {
+  height: 0.5rem;
+  background: var(--status-idle-bg);
+  border-radius: 999px;
+  overflow: hidden;
+}
+.meter__fill {
+  height: 100%;
+  border-radius: 999px;
+  background: var(--status-ok);
+}
+.meter__fill--warn { background: var(--status-warn); }
+.meter__fill--crit { background: var(--status-crit); }
+
+.meter__foot {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1) var(--space-3);
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+}
+/* Teks tingkat selalu ada; warna hanya penguat, bukan satu-satunya penanda. */
+.meter__level { font-weight: 600; }
+.meter__level--ok { color: #0a6b34; }
+.meter__level--warn { color: #8a5300; }
+.meter__level--crit { color: #99091f; }
+
+/* Daftar rincian di bawah meter diberi jarak, bukan menempel pada keterangan. */
+.meter + .fields,
+.meters + .fields { margin-top: var(--space-5); }

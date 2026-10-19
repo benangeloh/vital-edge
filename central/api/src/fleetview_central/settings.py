@@ -7,9 +7,9 @@ datang dari environment atau secret manager, tidak pernah dari berkas di repo.
 
 from __future__ import annotations
 
-from typing import Literal
+from typing import Literal, Self
 
-from pydantic import Field, field_validator
+from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from fleetview_common import ConfigError
@@ -58,6 +58,20 @@ class ApiSettings(BaseSettings):
     konfigurasi nginx di deploy/nginx/. Tanpa itu, di produksi setiap baris audit
     akan mencatat 127.0.0.1 dan tidak berguna saat menyelidiki insiden.
     """
+
+    health_disk_path: str = "/"
+    """Path yang partisinya diperiksa halaman Kesehatan Sistem."""
+    disk_warn_percent: float = Field(default=80.0, ge=0, le=100)
+    disk_critical_percent: float = Field(default=90.0, ge=0, le=100)
+
+    @model_validator(mode="after")
+    def _check_disk_thresholds(self) -> Self:
+        if self.disk_warn_percent >= self.disk_critical_percent:
+            raise ValueError(
+                f"disk_warn_percent ({self.disk_warn_percent}) harus lebih kecil dari "
+                f"disk_critical_percent ({self.disk_critical_percent})"
+            )
+        return self
 
     @field_validator("log_level")
     @classmethod

@@ -4,6 +4,7 @@ import { ShipTable } from "@/components/ShipTable";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { EmptyState, ErrorState, Loading, Panel, Section } from "@/components/ui/Primitives";
 import { absoluteTime, compactNumber, relativeTime } from "@/lib/format";
+import { HostStoragePanel } from "@/components/health/HostStoragePanel";
 import { useAcknowledgeAlert, useAlerts, useFleet, useSystemHealth } from "@/lib/queries";
 import { STATUS_META, shipStatus, summarise } from "@/lib/status";
 
@@ -231,6 +232,14 @@ export function SystemHealthPage() {
           </dl>
         </Panel>
       </Section>
+      {data?.storage && (
+        <Section
+          title="Penyimpanan host"
+          description="Partisi tempat API berjalan, bukan volume tiap database."
+        >
+          <HostStoragePanel storage={data.storage} />
+        </Section>
+      )}
     </>
   );
 }

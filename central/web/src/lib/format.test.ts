@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { compactNumber, relativeTime, shortId, staleness } from "./format";
+import { compactNumber, formatBytes, formatDuration, relativeTime, shortId, staleness } from "./format";
 
 describe("relativeTime", () => {
   const now = new Date("2026-08-31T12:00:00Z").getTime();
@@ -43,5 +43,40 @@ describe("shortId", () => {
   it("memotong id panjang", () => {
     expect(shortId("11111111-1111-1111", 8)).toBe("11111111");
     expect(shortId(null)).toBe("—");
+  });
+});
+
+describe("formatBytes", () => {
+  it.each([
+    [0, "0 B"],
+    [512, "512 B"],
+    [1536, "1,5 KB"],
+    [5 * 1024 ** 2, "5,0 MB"],
+    [250 * 1024 ** 3, "250 GB"],
+    [1.5 * 1024 ** 4, "1,5 TB"],
+  ])("%s -> %s", (bytes, expected) => {
+    expect(formatBytes(bytes)).toBe(expected);
+  });
+
+  it("nilai kosong atau tidak valid ditampilkan sebagai strip", () => {
+    expect(formatBytes(null)).toBe("—");
+    expect(formatBytes(undefined)).toBe("—");
+    expect(formatBytes(Number.NaN)).toBe("—");
+    expect(formatBytes(-1)).toBe("—");
+  });
+});
+
+describe("formatDuration", () => {
+  it.each([
+    [45, "45 dtk"],
+    [600, "10 mnt"],
+    [3 * 3600 + 5 * 60, "3 jam 5 mnt"],
+    [2 * 86_400 + 4 * 3600, "2 hr 4 jam"],
+  ])("%s dtk -> %s", (seconds, expected) => {
+    expect(formatDuration(seconds)).toBe(expected);
+  });
+
+  it("nilai kosong ditampilkan sebagai strip", () => {
+    expect(formatDuration(null)).toBe("—");
   });
 });
