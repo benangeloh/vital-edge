@@ -5,6 +5,7 @@ Inilah bentuk yang benar-benar berjalan di kapal:
     proses fleetview-edge
     ├── task: collector loop      polling perangkat lapangan
     ├── task: sync engine         batching + upload oportunistik
+    ├── task: heartbeat           lapor kondisi perangkat ke central
     └── task: uvicorn (Console)   UI operasional
 
 Satu proses, satu unit systemd, satu aliran log, satu kali restart. Kalau ini
@@ -26,6 +27,7 @@ import uvicorn
 from fastapi import FastAPI
 
 from fleetview_common import ConfigError, get_logger
+from fleetview_console import SystemMetrics
 from fleetview_contracts import AcquisitionSource
 from fleetview_edge.app import EdgeAgent
 from fleetview_edge.collector import BackoffPolicy, Collector, CollectorClock
@@ -38,6 +40,8 @@ from fleetview_edge.storage import StorageWriter
 from fleetview_edge.sync import (
     Batcher,
     FileExportTransport,
+    HeartbeatBuilder,
+    HeartbeatSender,
     NetworkManager,
     NetworkTransport,
     SyncEngine,
@@ -62,6 +66,7 @@ class EdgeRuntime:
         self.collector: Collector | None = None
         self.storage: StorageWriter | None = None
         self.sync: SyncEngine | None = None
+        self.heartbeat: HeartbeatSender | None = None
         self.console: FastAPI | None = None
         self._stopping = asyncio.Event()
 
@@ -140,6 +145,7 @@ class EdgeRuntime:
         )
 
         self.sync = self._build_sync()
+        self.heartbeat = self._build_heartbeat()
         self.console = self._build_console()
 
     def _build_sync(self) -> SyncEngine:
@@ -191,6 +197,34 @@ class EdgeRuntime:
             interval_seconds=cfg.sync.interval_seconds,
         )
 
+    def _build_heartbeat(self) -> HeartbeatSender | None:
+        """Pengirim heartbeat, atau None bila tidak ada central untuk dilapori.
+
+        Memakai NetworkManager milik sync engine, jadi heartbeat lewat link yang
+        sama dan dengan kredensial yang sama dengan batch telemetry.
+        """
+        cfg = self.settings
+        if self.sync is None or not cfg.sync.central_url:
+            return None
+        ship = cfg.require_ship()
+        builder = HeartbeatBuilder(
+            ship_id=ship.ship_id,
+            device_id=ship.device_id,
+            agent_version=self.agent.version,
+            config_version=cfg.config_version,
+            # Instance sendiri dan berumur panjang: CPU dihitung dari selisih dua
+            # pembacaan, jadi instance baru tiap heartbeat tak pernah punya nilai.
+            metrics=SystemMetrics(data_dir=cfg.storage.data_dir),
+            progress=self.sync.progress,
+            collector=self.collector,
+            storage=self.storage,
+        )
+        return HeartbeatSender(
+            manager=self.sync.manager,
+            builder=builder,
+            interval_seconds=cfg.sync.heartbeat_interval_seconds,
+        )
+
     def _build_console(self) -> FastAPI | None:
         if not self.settings.console.enabled:
             return None
@@ -226,6 +260,8 @@ class EdgeRuntime:
                 asyncio.create_task(self.collector.run(), name="collector"),
                 asyncio.create_task(self.sync.run(), name="sync"),
             ]
+            if self.heartbeat is not None:
+                tasks.append(asyncio.create_task(self.heartbeat.run(), name="heartbeat"))
         if self.console is not None:
             tasks.append(asyncio.create_task(self._serve_console(), name="console"))
 
@@ -252,6 +288,8 @@ class EdgeRuntime:
                 self.collector.stop()
             if self.sync is not None:
                 self.sync.stop()
+            if self.heartbeat is not None:
+                self.heartbeat.stop()
             # Beri kesempatan berhenti sendiri lebih dulu, baru dibatalkan.
             #
             # Membatalkan langsung membuat komponen berhenti di tengah jalan:

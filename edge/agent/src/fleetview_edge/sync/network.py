@@ -24,7 +24,7 @@ from typing import Any
 import httpx
 
 from fleetview_common import get_logger
-from fleetview_contracts import Ack, BatchEnvelope
+from fleetview_contracts import Ack, BatchEnvelope, Heartbeat, HeartbeatResponse
 from fleetview_edge.sync.base import (
     TransportAdapter,
     TransportHealth,
@@ -202,6 +202,32 @@ class NetworkTransport(TransportAdapter):
         self._counters["sent"] += 1
         self._counters["bytes"] += len(payload)
         return TransportResult(ack=ack, bytes_sent=len(payload))
+
+    async def send_heartbeat(self, heartbeat: Heartbeat) -> HeartbeatResponse:
+        """Laporkan kondisi perangkat ke central.
+
+        Jalur terpisah dari `send()`: heartbeat bukan batch, tidak punya ACK
+        berurutan, dan tidak pernah menandai apa pun di outbox. Kegagalannya
+        tidak boleh memengaruhi pengiriman data.
+
+        Raises:
+            TransportUnavailableError: gagal sementara.
+            TransportRejectedError: ditolak, atau jawaban tak bisa diurai.
+        """
+        response = await self._request(
+            "POST",
+            "/api/v1/ingest/heartbeat",
+            json=heartbeat.model_dump(mode="json"),
+        )
+        body = response.json()
+        data = body.get("data", body) if isinstance(body, dict) else body
+        try:
+            return HeartbeatResponse.model_validate(data)
+        except Exception as exc:
+            raise TransportRejectedError(
+                f"jawaban heartbeat dari central tidak bisa diurai: {exc}",
+                details={"body": str(data)[:300]},
+            ) from exc
 
     async def _send_chunked(self, envelope: BatchEnvelope, payload: bytes) -> TransportResult:
         session = await self._open_session(envelope)
