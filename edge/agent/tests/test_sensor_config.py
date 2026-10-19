@@ -132,3 +132,26 @@ class TestPemuatanYaml:
         with pytest.raises(ConfigError) as exc:
             load_sensor_registry(p)
         assert exc.value.code == "config.sensors_invalid"
+
+
+class TestRegistryKosong:
+    """Instalasi baru dimulai tanpa sensor; sensor ditambah lewat Console."""
+
+    def test_daftar_kosong_bisa_dimuat(self, tmp_path: Path) -> None:
+        path = tmp_path / "sensors.yaml"
+        path.write_text("sensors: []\n", encoding="utf-8")
+
+        registry = load_sensor_registry(path)
+
+        assert len(registry) == 0
+        assert registry.enabled == []
+        assert registry.channels == set()
+
+    def test_kunci_sensors_tanpa_isi_ditolak_dengan_pesan_jelas(self, tmp_path: Path) -> None:
+        """`sensors:` tanpa `[]` terbaca None; harus gagal sebagai ConfigError,
+        bukan TypeError mentah yang membingungkan teknisi."""
+        path = tmp_path / "sensors.yaml"
+        path.write_text("sensors:\n", encoding="utf-8")
+
+        with pytest.raises(ConfigError):
+            load_sensor_registry(path)

@@ -18,6 +18,7 @@ pasti hanya memindahkan pekerjaan ke saat yang paling sibuk.
 from __future__ import annotations
 
 import os
+import re
 import stat
 import tempfile
 from pathlib import Path
@@ -27,10 +28,18 @@ import yaml
 from pydantic import ValidationError as PydanticValidationError
 
 from fleetview_common import ValidationError, get_logger
+from fleetview_edge.config.sensor_presets import get_preset
 from fleetview_edge.config.sensors import SensorConfig
 from fleetview_edge.protocol.lp_a104.addressing import parse_ub_address, uw_area_of
 
-__all__ = ["delete_sensor", "read_sensors", "upsert_sensor", "validate_channel"]
+__all__ = [
+    "add_from_preset",
+    "allocate_uw",
+    "delete_sensor",
+    "read_sensors",
+    "upsert_sensor",
+    "validate_channel",
+]
 
 log = get_logger(__name__)
 
@@ -96,7 +105,7 @@ def _write_atomic(path: Path, entries: list[dict[str, Any]]) -> None:
     )
     header = (
         "# Registry sensor kapal ini. Disunting lewat Edge Console.\n"
-        "# sensor_id menjadi tag InfluxDB — mengubahnya memutus riwayat data.\n\n"
+        "# sensor_id menjadi tag InfluxDB, jadi mengubahnya memutus riwayat data.\n\n"
     )
     path.parent.mkdir(parents=True, exist_ok=True)
     fd, tmp = tempfile.mkstemp(dir=str(path.parent), prefix=f".{path.name}.")
@@ -218,5 +227,88 @@ def ladder_lines(entries: list[dict[str, Any]]) -> str:
     keluaran = "\n".join(baris)
     if tanpa_sumber:
         catatan = ", ".join(sorted(tanpa_sumber))
-        keluaran += f"\n\n; Belum bisa disusun — alamat sumber di panel belum diisi: {catatan}"
+        keluaran += f"\n\n; Belum bisa disusun, alamat sumber di panel belum diisi: {catatan}"
     return keluaran
+
+
+#: Blok UW yang sudah dipastikan bebas dan bisa dibaca lewat Modbus pada panel
+#: ini (docs/hardware/konvensi-atlogic.md). Di atas UW81 belum pernah diverifikasi.
+UW_FREE_FIRST = 45
+UW_FREE_LAST = 80
+
+_D_ADDRESS = re.compile(r"^D(\d{1,5})$")
+
+
+def allocate_uw(entries: list[dict[str, Any]]) -> str:
+    """Alamat UW bebas terendah di blok UW45-UW80.
+
+    Teknisi tidak perlu tahu area UW itu ada: ia memberi tahu alamat D tempat
+    nilai berada, dan sistem memilih tujuannya.
+    """
+    terpakai: set[int] = set()
+    for e in entries:
+        channel = str(e.get("channel", "")).strip().upper()
+        if channel.startswith("UW") and channel[2:].isdigit():
+            terpakai.add(int(channel[2:]))
+    for nomor in range(UW_FREE_FIRST, UW_FREE_LAST + 1):
+        if nomor not in terpakai:
+            return f"UW{nomor}"
+    raise ValidationError(
+        f"blok UW{UW_FREE_FIRST}-UW{UW_FREE_LAST} sudah penuh. Untuk sensor tambahan, uji satu "
+        "alamat di atas UW100 lebih dulu dengan angka tetap sebelum dipakai",
+        code="sensor.uw_penuh",
+    )
+
+
+def _normalize_d_address(alamat: str) -> str:
+    teks = alamat.strip().upper()
+    if not teks:
+        raise ValidationError(
+            "alamat sumber di panel wajib diisi, mis. D00160", code="sensor.alamat_kosong"
+        )
+    cocok = _D_ADDRESS.match(teks)
+    if cocok is None:
+        raise ValidationError(
+            f"alamat sumber {alamat!r} tidak dikenali. Bentuknya D diikuti angka, mis. D00160",
+            code="sensor.alamat_invalid",
+            details={"alamat": alamat},
+        )
+    return f"D{int(cocok.group(1)):05d}"
+
+
+def add_from_preset(
+    path: Path,
+    *,
+    adapter: str,
+    jenis: str,
+    sensor_id: str,
+    alamat: str = "",
+    channel: str = "",
+) -> str:
+    """Tambah sensor baru dari preset. Menolak nama yang sudah dipakai.
+
+    Berbeda dari `upsert_sensor`, ini tidak pernah menimpa: mengetik nama yang
+    sama dua kali di formulir sederhana adalah kesalahan, bukan permintaan ubah.
+    Mengubah sensor yang ada dilakukan lewat pengaturan lanjutan.
+
+    Pada LP-A104 ada dua jalan masuk. Dari `alamat` (D…): UW tujuan dipilih
+    otomatis dan alamat D dicatat untuk baris ladder. Dari `channel` (hasil
+    pencarian): UW itu sudah terbaca, jadi dipakai apa adanya.
+    """
+    preset = get_preset(jenis)
+    sensor_id = sensor_id.strip()
+    entries = read_sensors(path)
+    if any(e.get("sensor_id") == sensor_id for e in entries):
+        raise ValidationError(
+            f"nama sensor {sensor_id!r} sudah dipakai", code="sensor.nama_dipakai"
+        )
+
+    entry = preset.as_entry()
+    entry["sensor_id"] = sensor_id
+    channel, alamat = channel.strip(), alamat.strip()
+    if adapter == "lp_a104" and not channel:
+        entry["panel_source"] = _normalize_d_address(alamat)
+        entry["channel"] = allocate_uw(entries)
+    else:
+        entry["channel"] = channel or alamat
+    return upsert_sensor(path, entry, adapter=adapter)

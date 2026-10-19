@@ -1,324 +1,10 @@
 {% extends "base.html" %}
-{% block title %}Sensor
-{% if registry_error %}
-  <p class="err" role="alert">Tidak bisa membaca daftar sensor: {{ registry_error }}</p>
-{% elif registry and registry.editable %}
-{% set daftar = registry.sensors %}
-{% set diubah = daftar | selectattr("sensor_id", "equalto", edit) | list | first if edit else none %}
-
-<section class="card">
-  <h2 class="h2">Daftar sensor terpasang</h2>
-  <p class="sub">
-    Definisi sensor kapal ini — dari alamat mana dibaca, apa artinya, dan berapa
-    batas wajarnya. Perubahan berlaku setelah agent dijalankan ulang.
-  </p>
-
-  {% if request.query_params.get("disimpan") %}
-    <p class="ok" role="status">Sensor tersimpan. Jalankan ulang agent agar terpakai.</p>
-  {% endif %}
-  {% if request.query_params.get("dihapus") %}
-    <p class="ok" role="status">Sensor dihapus. Riwayat datanya tetap tersimpan.</p>
-  {% endif %}
-  {% if request.query_params.get("error") %}
-    <p class="err" role="alert">{{ request.query_params.get("error") }}</p>
-  {% endif %}
-
-  {% if not daftar %}
-    <p class="empty">Belum ada sensor terdaftar. Tambahkan lewat formulir di bawah.</p>
-  {% else %}
-  <div class="tablewrap">
-    <table class="tbl">
-      <thead>
-        <tr>
-          <th>Nama sensor</th><th>Alamat</th><th>Sumber panel</th><th>Besaran</th>
-          <th>Satuan</th><th>Skala</th><th>Batas wajar</th><th>Aktif</th><th></th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for s in daftar %}
-        <tr>
-          <td class="mono">{{ s.sensor_id }}{% if s.field_name and s.field_name != "value" %}<span class="sub">.{{ s.field_name }}</span>{% endif %}</td>
-          <td class="mono">{{ s.channel }}</td>
-          <td class="mono">{{ s.panel_source or "—" }}</td>
-          <td>{{ s.metric }}</td>
-          <td>{{ s.unit or "—" }}</td>
-          <td class="mono">{{ s.scale | default(1) }}</td>
-          <td class="sub">
-            {% set v = s.validation or {} %}
-            {% if v.min_value is not none or v.max_value is not none %}
-              {{ v.min_value if v.min_value is not none else "−∞" }} … {{ v.max_value if v.max_value is not none else "∞" }}
-            {% else %}—{% endif %}
-          </td>
-          <td>{% if s.enabled is defined and not s.enabled %}<span class="chip chip--idle">nonaktif</span>{% else %}<span class="chip chip--ok">ya</span>{% endif %}</td>
-          <td class="row-actions">
-            <a class="btn btn--small" href="/sensors?edit={{ s.sensor_id }}">Ubah</a>
-            <form method="post" action="/sensors/hapus" class="inline"
-                  onsubmit="return confirm('Hapus sensor {{ s.sensor_id }}? Riwayat datanya tetap tersimpan.')">
-              <input type="hidden" name="sensor_id" value="{{ s.sensor_id }}">
-              <button class="btn btn--small btn--danger" type="submit">Hapus</button>
-            </form>
-          </td>
-        </tr>
-        {% endfor %}
-      </tbody>
-    </table>
-  </div>
-  {% endif %}
-</section>
-
-{% if registry.ladder %}
-<section class="card card--ladder">
-  <h2 class="h2">Baris untuk ditempel ke atLogic</h2>
-  <p class="sub">
-    Nilai sensor hidup di area <span class="mono">D</span> milik PLC dan
-    <strong>tidak</strong> terbaca dari Ethernet — hanya area
-    <span class="mono">UW</span> yang terbaca. Tiap sensor butuh satu baris salin
-    di program panel. Salin blok ini ke akhir program Main, tepat sebelum
-    <span class="mono">END</span>, lalu download ke panel.
-  </p>
-  <pre class="snippet__body" id="ladder">{{ registry.ladder }}</pre>
-  <p class="sub">
-    Setelah download, nilainya langsung terbaca tanpa mengubah apa pun di sini.
-  </p>
-</section>
-{% endif %}
-
-<section class="card">
-  <h2 class="h2">{% if diubah %}Ubah sensor {{ diubah.sensor_id }}{% else %}Tambah sensor{% endif %}</h2>
-
-  {% if registry.adapter == "lp_a104" %}
-    <p class="sub">
-      Alamat memakai bentuk <span class="mono">UW</span> untuk word
-      (mis. <span class="mono">UW100</span>) atau <span class="mono">UB</span> untuk bit
-      (mis. <span class="mono">UB1000</span>), sesuai manual LP-A104.
-      Rentang yang berlaku: UW0–UW128999.
-    </p>
-    <p class="warn">
-      Jalur baca dari LP-A104 <strong>belum terkonfirmasi ke vendor</strong>.
-      Pemetaan di sini sudah bisa disiapkan, tetapi data baru mengalir setelah
-      jalur bacanya dipastikan.
-    </p>
-  {% else %}
-    <p class="sub">
-      Perangkat ini memakai adapter <span class="mono">{{ registry.adapter }}</span>,
-      jadi alamat memakai penamaan bebas (mis. <span class="mono">sim:me_port_rpm</span>).
-    </p>
-  {% endif %}
-
-  <form method="post" action="/sensors/simpan" class="form form--grid">
-    <label class="field">
-      <span class="field__label">Nama sensor</span>
-      <input class="field__input mono" name="sensor_id" required maxlength="64"
-             pattern="[a-z0-9_]+" placeholder="me_port_rpm"
-             value="{{ diubah.sensor_id if diubah else '' }}">
-      <span class="field__hint">
-        Huruf kecil, angka, garis bawah. Menjadi tag di basis data —
-        <strong>jangan diubah</strong> setelah dipakai, karena memutus riwayat.
-      </span>
-    </label>
-
-    <label class="field">
-      <span class="field__label">Alamat di perangkat</span>
-      <input class="field__input mono" name="channel" required maxlength="128"
-             placeholder="{{ 'UW100' if registry.adapter == 'lp_a104' else 'sim:me_port_rpm' }}"
-             value="{{ diubah.channel if diubah else '' }}">
-    </label>
-
-    {% if registry.adapter == "lp_a104" %}
-    <label class="field">
-      <span class="field__label">Alamat sumber di panel</span>
-      <input class="field__input mono" name="panel_source" maxlength="32"
-             placeholder="D00160"
-             value="{{ diubah.panel_source if diubah and diubah.panel_source else '' }}">
-      <span class="field__hint">
-        Alamat area <span class="mono">D</span> tempat nilai ini berada di ladder.
-        Bukan yang dibaca agent — dipakai untuk menyusun baris salin di bawah.
-      </span>
-    </label>
-    {% endif %}
-
-    <label class="field">
-      <span class="field__label">Besaran</span>
-      <input class="field__input" name="metric" required maxlength="64"
-             pattern="[a-z0-9_]+" placeholder="rpm"
-             value="{{ diubah.metric if diubah else '' }}">
-      <span class="field__hint">mis. rpm, temperature, pressure, fuel_flow</span>
-    </label>
-
-    <label class="field">
-      <span class="field__label">Satuan</span>
-      <input class="field__input" name="unit" maxlength="32" placeholder="rpm"
-             value="{{ diubah.unit if diubah and diubah.unit else '' }}">
-      <span class="field__hint">Tetapkan benar sejak awal — mengubahnya nanti membuat riwayat bercampur dua satuan.</span>
-    </label>
-
-    <label class="field">
-      <span class="field__label">Skala</span>
-      <input class="field__input mono" name="scale" inputmode="decimal"
-             value="{{ diubah.scale if diubah and diubah.scale is defined else '1' }}">
-      <span class="field__hint">nilai = mentah × skala + offset. Perangkat industri lazim mengirim 7425 untuk 742,5.</span>
-    </label>
-
-    <label class="field">
-      <span class="field__label">Offset</span>
-      <input class="field__input mono" name="offset" inputmode="decimal"
-             value="{{ diubah.offset if diubah and diubah.offset is defined else '0' }}">
-    </label>
-
-    <label class="field">
-      <span class="field__label">Batas bawah wajar</span>
-      <input class="field__input mono" name="min_value" inputmode="decimal" placeholder="kosongkan bila tidak ada"
-             value="{{ diubah.validation.min_value if diubah and diubah.validation and diubah.validation.min_value is not none else '' }}">
-    </label>
-
-    <label class="field">
-      <span class="field__label">Batas atas wajar</span>
-      <input class="field__input mono" name="max_value" inputmode="decimal" placeholder="kosongkan bila tidak ada"
-             value="{{ diubah.validation.max_value if diubah and diubah.validation and diubah.validation.max_value is not none else '' }}">
-      <span class="field__hint">Di luar batas tetap disimpan, hanya ditandai <em>suspect</em> — sensor rusak harus bisa dibedakan dari data yang tidak ada.</span>
-    </label>
-
-    <label class="field">
-      <span class="field__label">Selang baca (detik)</span>
-      <input class="field__input mono" name="poll_interval_seconds" inputmode="decimal"
-             value="{{ diubah.poll_interval_seconds if diubah and diubah.poll_interval_seconds is defined else '1' }}">
-    </label>
-
-    <label class="field">
-      <span class="field__label">Nama field</span>
-      <input class="field__input mono" name="field_name" maxlength="64"
-             value="{{ diubah.field_name if diubah and diubah.field_name is defined else 'value' }}">
-      <span class="field__hint">Biarkan <span class="mono">value</span>, kecuali beberapa sensor digabung jadi satu titik (mis. GPS: lat, lon).</span>
-    </label>
-
-    <div class="form__actions">
-      <button class="btn btn--primary" type="submit">
-        {% if diubah %}Simpan perubahan{% else %}Tambah sensor{% endif %}
-      </button>
-      {% if diubah %}<a class="btn" href="/sensors">Batal</a>{% endif %}
-    </div>
-  </form>
-</section>
-{% endif %}
-
-{% endblock %}
+{% block title %}Sensor{% endblock %}
 {% block content %}
 
-<h1 class="h1">Sensor</h1>
-<p class="lead">
-  Nilai yang buruk tetap disimpan dan ditandai, tidak dibuang — supaya sensor
-  rusak bisa dibedakan dari data yang memang tidak ada.
-</p>
-
-<section class="card card--flush" id="sensors" data-refresh="/partials/sensors" data-interval="5000">
-  {% include "partials/sensor_rows.html" %}
-</section>
-
-{% if registry_error %}
-  <p class="err" role="alert">Tidak bisa membaca daftar sensor: {{ registry_error }}</p>
-{% elif registry and registry.editable %}
-{% set daftar = registry.sensors %}
-{% set diubah = daftar | selectattr("sensor_id", "equalto", edit) | list | first if edit else none %}
-
-<section class="card">
-  <h2 class="h2">Daftar sensor terpasang</h2>
-  <p class="sub">
-    Definisi sensor kapal ini — dari alamat mana dibaca, apa artinya, dan berapa
-    batas wajarnya. Perubahan berlaku setelah agent dijalankan ulang.
-  </p>
-
-  {% if request.query_params.get("disimpan") %}
-    <p class="ok" role="status">Sensor tersimpan. Jalankan ulang agent agar terpakai.</p>
-  {% endif %}
-  {% if request.query_params.get("dihapus") %}
-    <p class="ok" role="status">Sensor dihapus. Riwayat datanya tetap tersimpan.</p>
-  {% endif %}
-  {% if request.query_params.get("error") %}
-    <p class="err" role="alert">{{ request.query_params.get("error") }}</p>
-  {% endif %}
-
-  {% if not daftar %}
-    <p class="empty">Belum ada sensor terdaftar. Tambahkan lewat formulir di bawah.</p>
-  {% else %}
-  <div class="tablewrap">
-    <table class="tbl">
-      <thead>
-        <tr>
-          <th>Nama sensor</th><th>Alamat</th><th>Sumber panel</th><th>Besaran</th>
-          <th>Satuan</th><th>Skala</th><th>Batas wajar</th><th>Aktif</th><th></th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for s in daftar %}
-        <tr>
-          <td class="mono">{{ s.sensor_id }}{% if s.field_name and s.field_name != "value" %}<span class="sub">.{{ s.field_name }}</span>{% endif %}</td>
-          <td class="mono">{{ s.channel }}</td>
-          <td class="mono">{{ s.panel_source or "—" }}</td>
-          <td>{{ s.metric }}</td>
-          <td>{{ s.unit or "—" }}</td>
-          <td class="mono">{{ s.scale | default(1) }}</td>
-          <td class="sub">
-            {% set v = s.validation or {} %}
-            {% if v.min_value is not none or v.max_value is not none %}
-              {{ v.min_value if v.min_value is not none else "−∞" }} … {{ v.max_value if v.max_value is not none else "∞" }}
-            {% else %}—{% endif %}
-          </td>
-          <td>{% if s.enabled is defined and not s.enabled %}<span class="chip chip--idle">nonaktif</span>{% else %}<span class="chip chip--ok">ya</span>{% endif %}</td>
-          <td class="row-actions">
-            <a class="btn btn--small" href="/sensors?edit={{ s.sensor_id }}">Ubah</a>
-            <form method="post" action="/sensors/hapus" class="inline"
-                  onsubmit="return confirm('Hapus sensor {{ s.sensor_id }}? Riwayat datanya tetap tersimpan.')">
-              <input type="hidden" name="sensor_id" value="{{ s.sensor_id }}">
-              <button class="btn btn--small btn--danger" type="submit">Hapus</button>
-            </form>
-          </td>
-        </tr>
-        {% endfor %}
-      </tbody>
-    </table>
-  </div>
-  {% endif %}
-</section>
-
-{% if registry.ladder %}
-<section class="card card--ladder">
-  <h2 class="h2">Baris untuk ditempel ke atLogic</h2>
-  <p class="sub">
-    Nilai sensor hidup di area <span class="mono">D</span> milik PLC dan
-    <strong>tidak</strong> terbaca dari Ethernet — hanya area
-    <span class="mono">UW</span> yang terbaca. Tiap sensor butuh satu baris salin
-    di program panel. Salin blok ini ke akhir program Main, tepat sebelum
-    <span class="mono">END</span>, lalu download ke panel.
-  </p>
-  <pre class="snippet__body" id="ladder">{{ registry.ladder }}</pre>
-  <p class="sub">
-    Setelah download, nilainya langsung terbaca tanpa mengubah apa pun di sini.
-  </p>
-</section>
-{% endif %}
-
-<section class="card">
-  <h2 class="h2">{% if diubah %}Ubah sensor {{ diubah.sensor_id }}{% else %}Tambah sensor{% endif %}</h2>
-
-  {% if registry.adapter == "lp_a104" %}
-    <p class="sub">
-      Alamat memakai bentuk <span class="mono">UW</span> untuk word
-      (mis. <span class="mono">UW100</span>) atau <span class="mono">UB</span> untuk bit
-      (mis. <span class="mono">UB1000</span>), sesuai manual LP-A104.
-      Rentang yang berlaku: UW0–UW128999.
-    </p>
-    <p class="warn">
-      Jalur baca dari LP-A104 <strong>belum terkonfirmasi ke vendor</strong>.
-      Pemetaan di sini sudah bisa disiapkan, tetapi data baru mengalir setelah
-      jalur bacanya dipastikan.
-    </p>
-  {% else %}
-    <p class="sub">
-      Perangkat ini memakai adapter <span class="mono">{{ registry.adapter }}</span>,
-      jadi alamat memakai penamaan bebas (mis. <span class="mono">sim:me_port_rpm</span>).
-    </p>
-  {% endif %}
-
+{# Formulir lengkap: semua isian registry. Dipakai untuk mengubah sensor yang
+   ada, dan di "Pengaturan lanjutan" untuk kasus khusus. #}
+{% macro form_lengkap(registry, diubah) %}
   <form method="post" action="/sensors/simpan" class="form form--grid">
     <label class="field">
       <span class="field__label">Nama sensor</span>
@@ -326,8 +12,8 @@
              pattern="[a-z0-9_]+" placeholder="me_port_rpm"
              value="{{ diubah.sensor_id if diubah else '' }}">
       <span class="field__hint">
-        Huruf kecil, angka, garis bawah. Menjadi tag di basis data —
-        <strong>jangan diubah</strong> setelah dipakai, karena memutus riwayat.
+        Huruf kecil, angka, garis bawah. Nama ini menjadi tag di basis data,
+        <strong>jangan diubah</strong> setelah dipakai karena memutus riwayat.
       </span>
     </label>
 
@@ -346,7 +32,7 @@
              value="{{ diubah.panel_source if diubah and diubah.panel_source else '' }}">
       <span class="field__hint">
         Alamat area <span class="mono">D</span> tempat nilai ini berada di ladder.
-        Bukan yang dibaca agent — dipakai untuk menyusun baris salin di bawah.
+        Tidak dibaca agent, hanya dipakai untuk menyusun baris salin ke atLogic.
       </span>
     </label>
     {% endif %}
@@ -356,21 +42,21 @@
       <input class="field__input" name="metric" required maxlength="64"
              pattern="[a-z0-9_]+" placeholder="rpm"
              value="{{ diubah.metric if diubah else '' }}">
-      <span class="field__hint">mis. rpm, temperature, pressure, fuel_flow</span>
+      <span class="field__hint">Contoh: rpm, temperature, pressure, fuel_flow</span>
     </label>
 
     <label class="field">
       <span class="field__label">Satuan</span>
       <input class="field__input" name="unit" maxlength="32" placeholder="rpm"
              value="{{ diubah.unit if diubah and diubah.unit else '' }}">
-      <span class="field__hint">Tetapkan benar sejak awal — mengubahnya nanti membuat riwayat bercampur dua satuan.</span>
+      <span class="field__hint">Tetapkan benar sejak awal. Mengubahnya nanti membuat riwayat bercampur dua satuan.</span>
     </label>
 
     <label class="field">
       <span class="field__label">Skala</span>
       <input class="field__input mono" name="scale" inputmode="decimal"
              value="{{ diubah.scale if diubah and diubah.scale is defined else '1' }}">
-      <span class="field__hint">nilai = mentah × skala + offset. Perangkat industri lazim mengirim 7425 untuk 742,5.</span>
+      <span class="field__hint">Nilai = mentah × skala + offset. Perangkat industri lazim mengirim 7425 untuk 742,5.</span>
     </label>
 
     <label class="field">
@@ -381,15 +67,15 @@
 
     <label class="field">
       <span class="field__label">Batas bawah wajar</span>
-      <input class="field__input mono" name="min_value" inputmode="decimal" placeholder="kosongkan bila tidak ada"
+      <input class="field__input mono" name="min_value" inputmode="decimal" placeholder="Kosongkan bila tidak ada"
              value="{{ diubah.validation.min_value if diubah and diubah.validation and diubah.validation.min_value is not none else '' }}">
     </label>
 
     <label class="field">
       <span class="field__label">Batas atas wajar</span>
-      <input class="field__input mono" name="max_value" inputmode="decimal" placeholder="kosongkan bila tidak ada"
+      <input class="field__input mono" name="max_value" inputmode="decimal" placeholder="Kosongkan bila tidak ada"
              value="{{ diubah.validation.max_value if diubah and diubah.validation and diubah.validation.max_value is not none else '' }}">
-      <span class="field__hint">Di luar batas tetap disimpan, hanya ditandai <em>suspect</em> — sensor rusak harus bisa dibedakan dari data yang tidak ada.</span>
+      <span class="field__hint">Di luar batas, nilai tetap disimpan dan hanya ditandai <em>suspect</em>, supaya sensor rusak bisa dibedakan dari data yang tidak ada.</span>
     </label>
 
     <label class="field">
@@ -402,7 +88,7 @@
       <span class="field__label">Nama field</span>
       <input class="field__input mono" name="field_name" maxlength="64"
              value="{{ diubah.field_name if diubah and diubah.field_name is defined else 'value' }}">
-      <span class="field__hint">Biarkan <span class="mono">value</span>, kecuali beberapa sensor digabung jadi satu titik (mis. GPS: lat, lon).</span>
+      <span class="field__hint">Biarkan <span class="mono">value</span>, kecuali beberapa sensor digabung jadi satu titik (contoh GPS: lat, lon).</span>
     </label>
 
     <div class="form__actions">
@@ -412,6 +98,268 @@
       {% if diubah %}<a class="btn" href="/sensors">Batal</a>{% endif %}
     </div>
   </form>
+{% endmacro %}
+
+{% macro pilihan_jenis(presets, terpilih="") %}
+  <select class="field__input" name="jenis" required>
+    <option value="">Pilih jenis sensor</option>
+    {% for p in presets %}
+    <option value="{{ p.id }}"{% if p.id == terpilih %} selected{% endif %}>{{ p.label }}</option>
+    {% endfor %}
+  </select>
+{% endmacro %}
+
+<header class="pagehead">
+  <h1 class="h1">Sensor</h1>
+  <p class="lead">
+    Nilai yang buruk tetap disimpan dan ditandai, tidak dibuang. Dengan begitu
+    sensor rusak bisa dibedakan dari data yang memang tidak ada.
+  </p>
+</header>
+
+<section class="block">
+  <h2 class="block__title">Pembacaan langsung</h2>
+  <p class="block__sub">Nilai terakhir tiap sensor yang sedang dibaca agent. Diperbarui otomatis.</p>
+  <div class="card card--flush" id="sensors" data-refresh="/partials/sensors" data-interval="5000">
+    {% include "partials/sensor_rows.html" %}
+  </div>
+</section>
+
+{% if registry_error %}
+  <p class="notice notice--err" role="alert">Tidak bisa membaca daftar sensor: {{ registry_error }}</p>
+{% elif registry and registry.editable %}
+{% set daftar = registry.sensors %}
+{% set diubah = daftar | selectattr("sensor_id", "equalto", edit) | list | first if edit else none %}
+
+<section class="block">
+  <h2 class="block__title">Daftar sensor terpasang</h2>
+  <p class="block__sub">
+    Definisi sensor kapal ini: dibaca dari alamat mana, apa artinya, dan berapa
+    batas wajarnya. Perubahan berlaku setelah agent dijalankan ulang.
+  </p>
+
+  {% if request.query_params.get("disimpan") %}
+    <p class="notice notice--ok" role="status"><strong>Tersimpan.</strong> Jalankan ulang agent agar sensor terpakai.</p>
+  {% endif %}
+  {% if request.query_params.get("dihapus") %}
+    <p class="notice notice--ok" role="status"><strong>Dihapus.</strong> Riwayat datanya tetap tersimpan.</p>
+  {% endif %}
+  {% if request.query_params.get("error") %}
+    <p class="notice notice--err" role="alert"><strong>Gagal.</strong> {{ request.query_params.get("error") }}</p>
+  {% endif %}
+
+  {% if not daftar %}
+    <div class="card"><p class="empty">Belum ada sensor terdaftar. Tambahkan lewat formulir di bawah.</p></div>
+  {% else %}
+  <div class="card card--flush">
+    <div class="tablewrap">
+      <table class="table table--registry">
+        <caption class="sr-only">Sensor yang terdaftar di kapal ini</caption>
+        <thead>
+          <tr>
+            <th scope="col">Nama sensor</th>
+            <th scope="col">Alamat</th>
+            {% if registry.adapter == "lp_a104" %}<th scope="col">Sumber panel</th>{% endif %}
+            <th scope="col">Besaran</th>
+            <th scope="col">Skala</th>
+            <th scope="col">Batas wajar</th>
+            <th scope="col">Status</th>
+            <th scope="col"><span class="sr-only">Aksi</span></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for s in daftar %}
+          <tr>
+            <th scope="row" class="mono">{{ s.sensor_id }}{% if s.field_name and s.field_name != "value" %}<span class="sub">.{{ s.field_name }}</span>{% endif %}</th>
+            <td class="mono">{{ s.channel }}</td>
+            {% if registry.adapter == "lp_a104" %}<td class="mono">{{ s.panel_source or "-" }}</td>{% endif %}
+            <td>{{ s.metric }}{% if s.unit %} <span class="unit">{{ s.unit }}</span>{% endif %}</td>
+            <td class="mono tabular">{{ "%g" | format(s.scale | default(1)) }}</td>
+            <td class="tabular nowrap">
+              {# Kunci yang tidak ada berarti tanpa batas; Undefined bukan none di Jinja. #}
+              {% set v = s.validation or {} %}
+              {% set lo = v.min_value if v.min_value is defined else none %}
+              {% set hi = v.max_value if v.max_value is defined else none %}
+              {% if lo is not none and hi is not none %}{{ "%g" | format(lo) }} s/d {{ "%g" | format(hi) }}
+              {% elif lo is not none %}min {{ "%g" | format(lo) }}
+              {% elif hi is not none %}maks {{ "%g" | format(hi) }}
+              {% else %}<span class="muted">Tanpa batas</span>{% endif %}
+            </td>
+            <td>{% if s.enabled is defined and not s.enabled %}<span class="chip chip--idle">○ Nonaktif</span>{% else %}<span class="chip chip--ok">● Aktif</span>{% endif %}</td>
+            <td class="row-actions">
+              <a class="btn btn--small" href="/sensors?edit={{ s.sensor_id }}">Ubah</a>
+              <form method="post" action="/sensors/hapus" class="inline"
+                    onsubmit="return confirm('Hapus sensor {{ s.sensor_id }}? Riwayat datanya tetap tersimpan.')">
+                <input type="hidden" name="sensor_id" value="{{ s.sensor_id }}">
+                <button class="btn btn--small btn--danger" type="submit">Hapus</button>
+              </form>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+  {% endif %}
+</section>
+
+{% if registry.ladder %}
+<section class="block">
+  <h2 class="block__title">Baris untuk ditempel ke atLogic</h2>
+  <p class="block__sub">
+    Salin blok ini ke akhir program Main, tepat sebelum <span class="mono">END</span>,
+    lalu download ke panel. Klik blok untuk memilih seluruh isinya.
+  </p>
+  <div class="card card--ladder">
+    <pre class="snippet__body" id="ladder">{{ registry.ladder }}</pre>
+    <p class="sub">
+      Nilai sensor berada di area <span class="mono">D</span> milik PLC dan
+      <strong>tidak</strong> terbaca dari Ethernet. Hanya area
+      <span class="mono">UW</span> yang terbaca, jadi tiap sensor butuh satu baris
+      salin di program panel. Setelah download, nilainya langsung terbaca.
+    </p>
+  </div>
+</section>
+{% endif %}
+
+<section class="block" id="tambah">
+  <h2 class="block__title">{% if diubah %}Ubah sensor {{ diubah.sensor_id }}{% else %}Tambah sensor{% endif %}</h2>
+
+  {% if registry.adapter == "lp_a104" %}
+    <p class="notice notice--warn">
+      Jalur baca dari LP-A104 sudah terbukti lewat pengujian lapangan (Modbus TCP),
+      tetapi <strong>belum terkonfirmasi ke vendor</strong>.
+    </p>
+  {% endif %}
+
+  {% if presets and not diubah %}
+    <form method="post" action="/sensors/tambah" class="card wizard">
+      <div class="step" role="group" aria-labelledby="langkah-1">
+        <h3 class="step__title" id="langkah-1"><span class="step__no" aria-hidden="true">1</span>Alamat sensor</h3>
+        <p class="step__sub">
+          {% if can_discover %}Cari di perangkat lalu pilih salah satu, atau ketik alamatnya sendiri.
+          {% else %}Ketik alamat sensor di perangkat.{% endif %}
+        </p>
+
+        {% if can_discover %}
+        <button class="btn" type="submit" formaction="/sensors/cari" formnovalidate>
+          Cari di perangkat{% if registry.adapter == "lp_a104" %} (sekitar 6 detik){% endif %}
+        </button>
+        {% endif %}
+
+        {% if found_error %}
+          <p class="notice notice--err" role="alert"><strong>Pencarian gagal.</strong> {{ found_error }}</p>
+        {% elif found is not none %}
+          {% if not found %}
+            <p class="notice">Tidak ada channel baru yang berisi nilai.</p>
+          {% else %}
+          <div class="picks" role="radiogroup" aria-label="Hasil pencarian">
+            {% for f in found %}
+            <label class="pick">
+              <input type="radio" name="channel" value="{{ f.channel }}">
+              <span class="pick__addr mono">{{ f.channel }}</span>
+              <span class="pick__val mono tabular">{{ f.value }}</span>
+              <span class="pick__tags">
+                {% if f.changing %}<span class="chip chip--ok">berubah</span>{% else %}<span class="chip chip--idle">tetap</span>{% endif %}
+                {% if f.likely_sensor %}<span class="chip chip--ok">kemungkinan sensor</span>{% else %}<span class="chip chip--idle">kemungkinan bawaan panel</span>{% endif %}
+              </span>
+            </label>
+            {% endfor %}
+          </div>
+          {% endif %}
+          <p class="step__note">
+            Yang <strong>tidak</strong> terlihat: sensor yang saat ini bernilai 0 (contoh
+            RPM saat mesin mati) dan sensor yang belum disalin ke area UW lewat ladder.
+            Arti tiap register tidak ditebak, jadi pilih jenisnya dan beri nama sendiri.
+          </p>
+        {% endif %}
+
+        {% if registry.adapter == "lp_a104" %}
+        <label class="field">
+          <span class="field__label">Alamat sumber di panel</span>
+          <input class="field__input mono" name="alamat" maxlength="32" placeholder="D00160"
+                 value="{{ draft.alamat or '' }}">
+          <span class="field__hint">
+            Alamat <span class="mono">D</span> tempat nilai berada di program panel. Isi bila
+            tidak memilih dari hasil pencarian. Alamat <span class="mono">UW</span> tujuan
+            dipilih otomatis dan baris salinnya muncul di atas.
+          </span>
+        </label>
+        {% else %}
+        <label class="field">
+          <span class="field__label">Alamat di perangkat</span>
+          <input class="field__input mono" name="alamat" maxlength="128" placeholder="sim:me_port_rpm"
+                 value="{{ draft.alamat or '' }}">
+          <span class="field__hint">
+            Perangkat ini memakai adapter <span class="mono">{{ registry.adapter }}</span>,
+            jadi alamat memakai penamaan bebas. Isi bila tidak memilih dari hasil pencarian.
+          </span>
+        </label>
+        {% endif %}
+      </div>
+
+      <div class="step" role="group" aria-labelledby="langkah-2">
+        <h3 class="step__title" id="langkah-2"><span class="step__no" aria-hidden="true">2</span>Jenis dan nama</h3>
+        <div class="form--grid">
+          <label class="field">
+            <span class="field__label">Jenis sensor</span>
+            {{ pilihan_jenis(presets, draft.jenis or "") }}
+            {% set belum = presets | rejectattr("verified") | map(attribute="label") | list %}
+            {% if belum %}
+            <span class="field__hint">
+              Skala {{ belum | join(" dan ") }} masih asumsi 1:1. Cocokkan ke layar HMI saat mesin berjalan.
+            </span>
+            {% endif %}
+          </label>
+
+          <label class="field">
+            <span class="field__label">Nama sensor</span>
+            <input class="field__input mono" name="sensor_id" required maxlength="64"
+                   pattern="[a-z0-9_]+" placeholder="me_rpm" value="{{ draft.sensor_id or '' }}">
+            <span class="field__hint">
+              Huruf kecil, angka, garis bawah. Nama ini menjadi tag di basis data,
+              <strong>jangan diubah</strong> setelah dipakai karena memutus riwayat.
+            </span>
+          </label>
+        </div>
+      </div>
+
+      <div class="form__actions">
+        <button class="btn btn--primary" type="submit">Tambah sensor</button>
+      </div>
+    </form>
+
+    <details class="adv">
+      <summary>Pengaturan lanjutan</summary>
+      <p class="sub">
+        Untuk kasus khusus: skala atau batas wajar sendiri, beberapa sensor digabung
+        jadi satu titik (contoh GPS), atau alamat yang ditentukan manual.
+        {% if registry.adapter == "lp_a104" %}
+        Alamat memakai bentuk <span class="mono">UW</span> untuk word
+        (contoh <span class="mono">UW100</span>) atau <span class="mono">UB</span> untuk bit
+        (contoh <span class="mono">UB1000</span>). Rentang yang berlaku: UW0–UW128999.
+        {% endif %}
+      </p>
+      <div class="card">{{ form_lengkap(registry, none) }}</div>
+    </details>
+  {% else %}
+    <div class="card">
+      {% if registry.adapter == "lp_a104" %}
+        <p class="sub">
+          Alamat memakai bentuk <span class="mono">UW</span> untuk word
+          (contoh <span class="mono">UW100</span>) atau <span class="mono">UB</span> untuk bit
+          (contoh <span class="mono">UB1000</span>), sesuai manual LP-A104.
+          Rentang yang berlaku: UW0–UW128999.
+        </p>
+      {% else %}
+        <p class="sub">
+          Perangkat ini memakai adapter <span class="mono">{{ registry.adapter }}</span>,
+          jadi alamat memakai penamaan bebas (contoh <span class="mono">sim:me_port_rpm</span>).
+        </p>
+      {% endif %}
+      {{ form_lengkap(registry, diubah) }}
+    </div>
+  {% endif %}
 </section>
 {% endif %}
 

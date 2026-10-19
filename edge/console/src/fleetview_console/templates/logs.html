@@ -24,7 +24,7 @@
       <dd>
         {% if sandi %}
           <span class="mono chip chip--warn">{{ sandi }}</span>
-          <span class="sub">— catat sekarang, lalu <a href="/logs">tutup tampilan ini</a></span>
+          <span class="sub">Catat sekarang, lalu <a href="/logs">tutup tampilan ini</a></span>
         {% elif not penyimpanan.sandi_tersimpan %}
           <span class="sub">tidak tersimpan di perangkat ini</span>
           <span class="sub">(InfluxDB disiapkan manual; setel ulang dengan
@@ -52,7 +52,7 @@
           <span class="chip chip--ok">terpasang</span>
         {% else %}
           <span class="chip chip--crit">belum disetel</span>
-          <span class="sub">— setiap penulisan akan ditolak</span>
+          <span class="sub">Setiap penulisan akan ditolak.</span>
         {% endif %}
       </dd>
 
@@ -64,7 +64,7 @@
           <span class="chip chip--ok">ya</span>
         {% else %}
           <span class="chip chip--crit">tidak</span>
-          <span class="sub">— sinkronisasi ke pusat tidak terpengaruh</span>
+          <span class="sub">Sinkronisasi ke pusat tidak terpengaruh.</span>
         {% endif %}
       </dd>
 
@@ -80,6 +80,103 @@
   {% else %}
     <p class="empty">Rincian penyimpanan tidak tersedia.</p>
   {% endif %}
+</section>
+
+<section class="card">
+  <h2 class="h2">Pratinjau data</h2>
+  <p class="sub">
+    Titik data terbaru langsung dari InfluxDB lokal, lintas semua sensor,
+    supaya tidak perlu membuka <span class="mono">:8086</span> sendiri hanya
+    untuk memastikan datanya benar-benar tersimpan.
+  </p>
+
+  {% if pratinjau_error %}
+    <p class="err" role="alert">Tidak bisa membaca pratinjau: {{ pratinjau_error }}</p>
+  {% elif not pratinjau %}
+    <p class="empty">Belum ada data tersimpan dalam satu jam terakhir.</p>
+  {% else %}
+    <table class="table">
+      <caption class="sr-only">Titik data terbaru di penyimpanan lokal</caption>
+      <thead>
+        <tr>
+          <th scope="col">Waktu</th>
+          <th scope="col">Sensor</th>
+          <th scope="col">Metrik</th>
+          <th scope="col">Field</th>
+          <th scope="col">Nilai</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for titik in pratinjau %}
+        <tr>
+          <td class="num tabular mono">{{ titik.waktu_us | relative_us }}</td>
+          <td class="mono">{{ titik.sensor_id }}</td>
+          <td>{{ titik.metric }}</td>
+          <td class="sub mono">{{ titik.field }}</td>
+          <td class="num tabular mono">{{ titik.nilai }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  {% endif %}
+</section>
+
+<section class="card">
+  <h2 class="h2">Ekspor data</h2>
+  <p class="sub">
+    Menulis paket portabel ke media lepas-pasang.
+    <strong>Data lokal tidak dihapus</strong>. Batch tetap tertunda sampai
+    central mengonfirmasi penerimaannya, jadi flashdisk yang hilang tidak
+    menghilangkan apa pun.
+  </p>
+
+  {% if request.query_params.get("started") %}
+    <p class="ok" role="status">Ekspor dimulai. Jangan cabut media sampai selesai.</p>
+  {% elif request.query_params.get("error") %}
+    <p class="err" role="alert">Ekspor gagal dimulai. Periksa log.</p>
+  {% endif %}
+
+  {% if targets_error %}
+    <p class="err" role="alert">Tidak bisa memeriksa media: {{ targets_error }}</p>
+  {% elif not targets %}
+    <p class="empty">Tidak ada media terdeteksi. Colokkan USB atau HDD lalu muat ulang halaman.</p>
+  {% else %}
+    <form method="post" action="/export/start" class="export">
+      {% for t in targets %}
+      <label class="option{% if not t.writable %} option--off{% endif %}">
+        <input type="radio" name="target" value="{{ t.path }}"
+               {% if loop.first and t.writable %}checked{% endif %}
+               {% if not t.writable %}disabled{% endif %}>
+        <span class="option__body">
+          <span class="option__label">{{ t.label }}</span>
+          <span class="option__note mono">{{ t.path }}</span>
+          <span class="option__note">
+            {{ t.free_bytes | bytes_human }} bebas
+            {% if not t.writable %} · tidak bisa ditulis{% endif %}
+          </span>
+        </span>
+      </label>
+      {% endfor %}
+
+      {% if sync %}
+      <p class="hint">
+        Perkiraan yang akan diekspor: {{ sync.pending_records | number }} record
+        dalam {{ sync.pending_batches | number }} batch.
+      </p>
+      {% endif %}
+
+      <button type="submit" class="btn btn--primary">Mulai ekspor</button>
+    </form>
+  {% endif %}
+
+  <p class="hint">
+    Isi paket: <span class="mono">manifest.json</span> (identitas, rentang,
+    jumlah, checksum keseluruhan), <span class="mono">telemetry/</span>
+    (berkas batch, byte-nya identik dengan kiriman jaringan), dan
+    <span class="mono">checksums/</span> (sha256 per berkas). Alat impor di
+    kantor memverifikasi seluruh checksum sebelum satu byte pun dipercaya,
+    lalu mengirimnya ke endpoint ingest yang sama dengan jalur jaringan.
+  </p>
 </section>
 
 <h1 class="h1">Log</h1>

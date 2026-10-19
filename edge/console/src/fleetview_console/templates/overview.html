@@ -6,11 +6,11 @@
 <section class="card">
   <h2 class="h2">Identitas</h2>
   <dl class="kv">
-    <dt>Kapal</dt><dd>{{ ship_name or "—" }}</dd>
-    <dt>Ship ID</dt><dd class="mono">{{ ship_id or "—" }}</dd>
-    <dt>Device ID</dt><dd class="mono">{{ system.device_id if system else "—" }}</dd>
-    <dt>Versi agent</dt><dd class="mono">{{ agent_version or "—" }}</dd>
-    <dt>Versi config</dt><dd class="mono">{{ system.config_version if system else "—" }}</dd>
+    <dt>Kapal</dt><dd>{{ ship_name or "-" }}</dd>
+    <dt>Ship ID</dt><dd class="mono">{{ ship_id or "-" }}</dd>
+    <dt>Device ID</dt><dd class="mono">{{ system.device_id if system else "-" }}</dd>
+    <dt>Versi agent</dt><dd class="mono">{{ agent_version or "-" }}</dd>
+    <dt>Versi config</dt><dd class="mono">{{ system.config_version if system else "-" }}</dd>
   </dl>
 </section>
 

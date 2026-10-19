@@ -77,6 +77,28 @@ class FakeContext:
             "tersangga": 0,
         }
 
+    async def storage_preview(self, *, limit: int = 20) -> list[dict[str, Any]]:
+        self._guard("storage_preview")
+        if self.empty:
+            return []
+        now = now_micros()
+        return [
+            {
+                "waktu_us": now - 2_000_000,
+                "sensor_id": "me_port_rpm",
+                "metric": "rpm",
+                "field": "value",
+                "nilai": 742.5,
+            },
+            {
+                "waktu_us": now - 3_000_000,
+                "sensor_id": "gps_main",
+                "metric": "position",
+                "field": "lat",
+                "nilai": -7.2575,
+            },
+        ]
+
     def storage_password(self, pin: str) -> str:
         self._guard("storage_password")
         from fleetview_common import ConfigError

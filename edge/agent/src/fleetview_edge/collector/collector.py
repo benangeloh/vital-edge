@@ -33,7 +33,12 @@ from fleetview_edge.collector.clock import CLOCK_ADJUSTED_TAG, CollectorClock
 from fleetview_edge.collector.supervisor import BackoffPolicy, ConnectionSupervisor
 from fleetview_edge.config.sensors import SensorRegistry
 from fleetview_edge.parser.parser import ParsedValue, TelemetryParser
-from fleetview_edge.protocol.base import ProtocolAdapter, ProtocolTimeoutError, RawPoint
+from fleetview_edge.protocol.base import (
+    DiscoveredChannel,
+    ProtocolAdapter,
+    ProtocolTimeoutError,
+    RawPoint,
+)
 from fleetview_edge.validator.rules import SensorValidator
 
 __all__ = ["Collector", "CollectorStats", "TelemetrySink"]
@@ -112,6 +117,7 @@ class Collector:
         self._stats = CollectorStats()
         self._stopping = asyncio.Event()
         self._latest: dict[str, TelemetryRecord] = {}
+        self._idle_logged = False
         self._next_due_us: dict[str, int] = {}
         """sensor_id -> kapan record berikutnya boleh dipancarkan.
 
@@ -213,6 +219,25 @@ class Collector:
         pembacaan yang gagal.
         """
         self._stats.polls_attempted += 1
+
+        # Tanpa sensor terdaftar, tidak ada yang perlu dibaca — dan perangkat
+        # tidak boleh disentuh. Instalasi baru mulai dengan registry kosong; pada
+        # LP-A104, menyambung lalu memutus tiap putaran menumpuk sesi di
+        # FIN_WAIT_2 sampai panel berhenti menjawab Modbus.
+        #
+        # polls_attempted tetap dinaikkan di atas: watchdog systemd menilai
+        # collector hidup dari angka itu, dan diam yang tidak menaikkannya akan
+        # membuat agent dibunuh dan dinyalakan ulang.
+        if not self._registry.enabled:
+            if not self._idle_logged:
+                log.info(
+                    "collector.menunggu_sensor",
+                    adapter=self._adapter.name,
+                    note="registry sensor kosong; perangkat tidak dibaca",
+                )
+                self._idle_logged = True
+            return []
+        self._idle_logged = False
 
         if not await self._supervisor.ensure_connected():
             self._stats.polls_failed += 1
@@ -361,6 +386,21 @@ class Collector:
         for pv in values:
             grouped.setdefault(pv.sensor.sensor_id, []).append(pv)
         return grouped
+
+    async def discover(self) -> list[DiscoveredChannel]:
+        """Cari channel yang sedang berisi nilai di perangkat.
+
+        Menyambungkan perangkat bila belum, lewat supervisor yang sama dengan
+        polling: koneksi dipakai ulang, tidak dibuka khusus untuk pencarian.
+        Registry boleh kosong — justru itulah saat pencarian dibutuhkan.
+        """
+        if not await self._supervisor.ensure_connected():
+            raise ProtocolError(
+                "tidak bisa tersambung ke perangkat; periksa kabel dan alamat panel",
+                code="collector.not_connected",
+                retryable=True,
+            )
+        return await self._adapter.discover()
 
     async def snapshot_health(self) -> dict[str, object]:
         """Ringkasan untuk Health Monitor dan Edge Console."""

@@ -13,7 +13,7 @@ __all__ = ["register_filters"]
 def relative_us(micros: int | None) -> str:
     """Waktu relatif ringkas dari epoch mikrodetik."""
     if not micros:
-        return "—"
+        return "-"
     seconds = max(0, int(time.time() - micros / 1_000_000))
     if seconds < 60:
         return f"{seconds} dtk"
@@ -26,7 +26,7 @@ def relative_us(micros: int | None) -> str:
 
 def duration(seconds: float | None) -> str:
     if seconds is None:
-        return "—"
+        return "-"
     total = int(seconds)
     if total < 60:
         return f"{total} dtk"
@@ -39,7 +39,7 @@ def duration(seconds: float | None) -> str:
 
 def bytes_human(value: int | None) -> str:
     if value is None:
-        return "—"
+        return "-"
     size = float(value)
     for unit in ("B", "KB", "MB", "GB", "TB"):
         if size < 1024 or unit == "TB":
@@ -52,7 +52,7 @@ def number(value: Any) -> str:
     """Pemisah ribuan gaya Indonesia. Angka besar tanpa pemisah sangat mudah
     salah baca — dan di halaman ini angka besar berarti data yang tertahan."""
     if value is None:
-        return "—"
+        return "-"
     try:
         return f"{int(value):,}".replace(",", ".")
     except (TypeError, ValueError):
@@ -60,7 +60,7 @@ def number(value: Any) -> str:
 
 
 def percent(value: float | None) -> str:
-    return "—" if value is None else f"{value:.0f}%"
+    return "-" if value is None else f"{value:.0f}%"
 
 
 def measure(value: float | None, unit: str = "") -> str:
@@ -69,7 +69,7 @@ def measure(value: float | None, unit: str = "") -> str:
     Suhu 0 °C dan suhu yang tidak terbaca menuntut tindakan yang sangat berbeda.
     """
     if value is None:
-        return "—"
+        return "-"
     return f"{value:g}{unit}"
 
 

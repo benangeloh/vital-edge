@@ -3,7 +3,7 @@
 {% block content %}
 <h1 class="h1">Konfigurasi</h1>
 <p class="lead">
-  Hanya-baca. Nilai sensitif — token, kredensial, DSN — <strong>tidak pernah
+  Hanya-baca. Nilai sensitif (token, kredensial, DSN) <strong>tidak pernah
   ditampilkan</strong>, termasuk kepada teknisi yang sedang membuka halaman ini
   di kapal. Yang bisa dilihat adalah apakah nilainya sudah diisi atau belum.
 </p>
@@ -23,9 +23,9 @@
           {% endfor %}
         </dl>
       {% elif value is sequence and value is not string %}
-        <span class="mono">{{ value | join(", ") if value else "—" }}</span>
+        <span class="mono">{{ value | join(", ") if value else "-" }}</span>
       {% elif value is none %}
-        <span class="sub">—</span>
+        <span class="sub">-</span>
       {% elif value == "••••••••" %}
         <span class="chip chip--idle" title="Nilai disembunyikan">••••••••</span>
       {% elif value == "(belum diisi)" %}

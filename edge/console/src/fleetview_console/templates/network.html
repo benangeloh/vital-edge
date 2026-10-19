@@ -36,7 +36,7 @@
           {% if l.available %}<span class="chip chip--ok">● aktif</span>
           {% else %}<span class="chip chip--idle">○ tidak aktif</span>{% endif %}
         </td>
-        <td class="mono">{{ l.ip_address or "—" }}</td>
+        <td class="mono">{{ l.ip_address or "-" }}</td>
         <td>
           {% if l.central_reachable is none %}
             <span class="chip chip--idle">○ belum diuji</span>

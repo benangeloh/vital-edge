@@ -25,12 +25,15 @@ from fleetview_console import (
     redact_config,
 )
 from fleetview_edge.collector import Collector
+from fleetview_edge.config.sensor_discovery import annotate
 from fleetview_edge.config.sensor_editor import (
+    add_from_preset,
     delete_sensor,
     ladder_lines,
     read_sensors,
     upsert_sensor,
 )
+from fleetview_edge.config.sensor_presets import PRESETS
 from fleetview_edge.provisioning import provision, setup_pin
 from fleetview_edge.settings import EdgeSettings
 from fleetview_edge.storage import StorageWriter
@@ -107,6 +110,19 @@ class AgentConsoleContext:
                 detail["tersangga"] = health.buffered_records
         return detail
 
+    async def storage_preview(self, *, limit: int = 20) -> list[dict[str, Any]]:
+        """Titik data terbaru di penyimpanan lokal, untuk pratinjau di Console.
+
+        Supaya teknisi tidak perlu membuka InfluxDB langsung di `:8086` hanya
+        untuk memastikan datanya benar-benar tersimpan. Opsional — backend
+        yang tidak mendukungnya (atau belum dirakit) melempar
+        `NotImplementedError`, dan Console menampilkannya sebagai keterbatasan
+        biasa, bukan kegagalan.
+        """
+        if self._storage is None:
+            raise NotImplementedError("penyimpanan belum dirakit — pratinjau tidak tersedia")
+        return await self._storage.query_recent(limit=limit)
+
     def storage_password(self, pin: str) -> str:
         """Kata sandi admin InfluxDB, di balik PIN perangkat.
 
@@ -163,6 +179,45 @@ class AgentConsoleContext:
                 "lokasi registry sensor tidak diketahui", code="sensor.no_registry_path"
             )
         return upsert_sensor(path, entry, adapter=self._settings.collector.adapter)
+
+    def sensor_presets(self) -> list[dict[str, Any]]:
+        """Jenis sensor yang bisa dipilih di formulir sederhana."""
+        return [p.as_dict() for p in PRESETS]
+
+    def add_sensor_simple(
+        self, *, jenis: str, sensor_id: str, alamat: str = "", channel: str = ""
+    ) -> str:
+        """Tambah sensor dari preset: teknisi hanya memilih jenis, menamai, dan
+        mengisi alamat. Besaran, skala, dan alamat UW tujuan ditentukan sistem."""
+        path = self._settings.collector.sensors_path
+        if path is None:
+            raise ConfigError(
+                "lokasi registry sensor tidak diketahui", code="sensor.no_registry_path"
+            )
+        return add_from_preset(
+            path,
+            adapter=self._settings.collector.adapter,
+            jenis=jenis,
+            sensor_id=sensor_id,
+            alamat=alamat,
+            channel=channel,
+        )
+
+    async def discover_channels(self) -> list[dict[str, Any]]:
+        """Channel yang sedang berisi nilai di perangkat dan belum terdaftar.
+
+        Hanya yang sudah berisi nilai yang bisa ditemukan; sensor bernilai 0
+        saat ini, atau yang belum disalin ke area UW, tidak terlihat.
+        """
+        if self._collector is None:
+            raise ConfigError(
+                "akuisisi belum dijalankan, jadi perangkat belum bisa dicari",
+                code="sensor.no_collector",
+            )
+        found = await self._collector.discover()
+        path = self._settings.collector.sensors_path
+        entries = read_sensors(path) if path else []
+        return annotate(found, entries, adapter=self._settings.collector.adapter)
 
     def remove_sensor(self, sensor_id: str) -> bool:
         path = self._settings.collector.sensors_path

@@ -14,6 +14,7 @@ dengan data sungguhan di hilir.
 
 from __future__ import annotations
 
+import asyncio
 import math
 import random
 from enum import StrEnum
@@ -21,6 +22,7 @@ from enum import StrEnum
 from fleetview_common import now_micros
 from fleetview_edge.protocol.base import (
     AdapterHealth,
+    DiscoveredChannel,
     LinkState,
     ProtocolAdapter,
     ProtocolNotConnectedError,
@@ -82,8 +84,10 @@ class SimulatorAdapter(ProtocolAdapter):
         seed: int | None = None,
         noise: float = 0.02,
         fuel_start_percent: float = 84.0,
+        discover_settle_seconds: float = 0.5,
     ) -> None:
         self.phase = phase
+        self._discover_settle = discover_settle_seconds
         self._rng = random.Random(seed)
         self._noise = noise
         self._connected = False
@@ -150,6 +154,18 @@ class SimulatorAdapter(ProtocolAdapter):
             "sim:gps_cog": round(cog, 1),
         }
         return [RawPoint(channel=ch, value=v, read_at_us=now) for ch, v in values.items()]
+
+    async def discover(self) -> list[DiscoveredChannel]:
+        """Dua pembacaan berjarak singkat; yang nilainya berbeda ditandai berubah."""
+        first = {p.channel: p.value for p in await self.read_points()}
+        await asyncio.sleep(self._discover_settle)
+        second = await self.read_points()
+        return [
+            DiscoveredChannel(
+                channel=p.channel, value=p.value, changing=first.get(p.channel) != p.value
+            )
+            for p in second
+        ]
 
     async def health(self) -> AdapterHealth:
         return AdapterHealth(

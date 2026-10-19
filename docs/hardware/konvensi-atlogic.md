@@ -112,14 +112,43 @@ Cara memastikan, sekali per sensor:
 
 ## 4. Urutan kerja menambah satu sensor
 
-1. **Di dashboard** (halaman Sensor): isi nama, alamat `UW5x`, alamat sumber
-   `D00xxx`, besaran, satuan, skala, batas wajar
+Dua jalan, tergantung apakah baris salin di ladder sudah ada.
+
+**A. Sensor baru (belum disalin di ladder)**: halaman Sensor di Edge Console:
+
+1. Pada langkah 1, isi **alamat sumber di panel** (`D00xxx`). Pada langkah 2, pilih
+   **jenis sensor** dan beri **nama**.
+   Besaran, satuan, skala, batas wajar, dan alamat `UW` tujuan ditentukan sistem
+   (blok UW45–UW80, dipilih yang bebas berikutnya).
 2. **Salin blok ladder** yang muncul di halaman itu
 3. **Tempel ke atLogic**, sebelum `END`, lalu download ke panel
 4. **Restart agent**: `sudo systemctl restart fleetview-agent`
 5. **Periksa**: `sudo fleetview-status`, lalu bandingkan angkanya dengan layar HMI
 
-Tidak ada langkah yang menuntut menyunting berkas atau menulis kode.
+**B. Sensor yang barisnya sudah ada di ladder**: tombol **Cari di perangkat**, di dalam formulir yang sama:
+
+1. Pada langkah 1 (Alamat sensor), tekan **Cari di perangkat**. Console membaca
+   UW0–UW80 dua kali (jarak sekitar 6 detik) dan menampilkan register yang berisi
+   nilai dan belum terdaftar.
+2. Pilih register yang dimaksud, lalu pada langkah 2 pilih jenis dan beri nama.
+3. Tekan **Tambah sensor**, restart agent, lalu periksa seperti di atas.
+
+Batas pencarian, supaya tidak mengira lebih dari yang bisa:
+
+- Hanya register yang **sudah berisi nilai**. Sensor yang saat itu bernilai 0
+  (mis. RPM saat mesin mati) tidak terlihat.
+- Sensor yang **belum disalin ke area UW** tidak terlihat sama sekali: nilainya
+  hidup di area `D`, yang tidak terbaca dari Ethernet. Jalan A tetap dibutuhkan.
+- Arti register tidak ditebak. Register di luar UW45–UW80 ditandai
+  "kemungkinan bawaan panel" (mis. UW20 yang selalu 2).
+- Dibangun dan diuji terhadap klien Modbus tiruan, **belum terhadap panel asli**.
+  Percobaan pertama di panel sungguhan sebaiknya diamati.
+
+Tidak ada langkah yang menuntut menyunting berkas atau menulis kode. Formulir
+lengkap (skala sendiri, batas wajar, GPS multi-field) ada di **Pengaturan lanjutan**.
+
+Registry baru mulai **kosong**. Selama kosong, collector menganggur dan tidak
+menyentuh panel sama sekali.
 
 ---
 

@@ -49,9 +49,12 @@ tetap bodoh dan mengembalikan nilai mentah apa adanya.
 
 from __future__ import annotations
 
+import asyncio
+
 from fleetview_common import ProtocolError, ValidationError, get_logger, now_micros
 from fleetview_edge.protocol.base import (
     AdapterHealth,
+    DiscoveredChannel,
     LinkState,
     ProtocolAdapter,
     RawPoint,
@@ -99,6 +102,14 @@ def parse_uw_channel(channel: str) -> int:
     return alamat
 
 
+DISCOVER_WORDS = 81
+"""UW0-UW80: READ AREA yang terdokumentasi dan sudah terbukti terbaca."""
+
+DISCOVER_SETTLE_SECONDS = 6.0
+"""Jarak dua pembacaan. Panel memperbarui area UW mengikuti Group Interval
+CH1 (5 detik), jadi jarak yang lebih pendek tidak akan menangkap perubahan."""
+
+
 class LPA104Adapter(ProtocolAdapter):
     """Membaca register panel lewat Modbus TCP.
 
@@ -116,6 +127,7 @@ class LPA104Adapter(ProtocolAdapter):
         channels: list[str] | None = None,
         unit_id: int = 1,
         timeout_seconds: float = 5.0,
+        discover_settle_seconds: float = DISCOVER_SETTLE_SECONDS,
     ) -> None:
         if not host:
             raise ProtocolError(
@@ -127,6 +139,7 @@ class LPA104Adapter(ProtocolAdapter):
             host=host, port=port, unit_id=unit_id, timeout_seconds=timeout_seconds
         )
         self._host = host
+        self._discover_settle = discover_settle_seconds
         self._channels = list(channels or [])
         self._alamat = {ch: parse_uw_channel(ch) for ch in self._channels}
         self._link = LinkState.DISCONNECTED
@@ -194,6 +207,27 @@ class LPA104Adapter(ProtocolAdapter):
         ]
         self._counters["terbaca"] += len(titik)
         return titik
+
+    async def discover(self) -> list[DiscoveredChannel]:
+        """Sapu area UW0-UW80 dua kali, lalu laporkan register yang berisi.
+
+        Hanya area yang terdokumentasi dan sudah terbukti terbaca; di atas UW81
+        belum pernah diverifikasi pada panel ini. Satu permintaan per pembacaan
+        lewat koneksi yang sama dengan polling, jadi tidak menambah beban sesi
+        dan tidak mendekati batas 123 register.
+
+        Yang tidak bisa ditemukan: register yang bernilai 0 di kedua pembacaan
+        (mis. RPM saat mesin mati), dan sensor yang belum disalin ke area UW
+        lewat ladder — nilainya hidup di area D yang tidak terbaca dari Ethernet.
+        """
+        pertama = await self._client.read_range(0, DISCOVER_WORDS)
+        await asyncio.sleep(self._discover_settle)
+        kedua = await self._client.read_range(0, DISCOVER_WORDS)
+        return [
+            DiscoveredChannel(channel=f"UW{i}", value=b, changing=a != b)
+            for i, (a, b) in enumerate(zip(pertama, kedua, strict=True))
+            if a or b
+        ]
 
     async def health(self) -> AdapterHealth:
         return AdapterHealth(

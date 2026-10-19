@@ -22,6 +22,7 @@ from fleetview_common import ProtocolError
 
 __all__ = [
     "AdapterHealth",
+    "DiscoveredChannel",
     "LinkState",
     "ProtocolAdapter",
     "ProtocolNotConnectedError",
@@ -74,6 +75,21 @@ class RawPoint:
     device_quality: str | None = None
     """Sinyal kualitas dari perangkat itu sendiri, bila ada. Bukan hasil
     penilaian kita — Validator yang melakukan itu."""
+
+
+@dataclass(frozen=True, slots=True)
+class DiscoveredChannel:
+    """Satu channel yang ditemukan berisi nilai saat pencarian.
+
+    Hanya alamat dan nilainya. Arti channel itu (sensor apa, satuan apa) tidak
+    pernah ditebak: teknisi yang menamainya.
+    """
+
+    channel: str
+    value: float | int | bool | str
+    changing: bool
+    """Nilainya berbeda di antara dua pembacaan. Register yang berubah hampir
+    pasti data proses; yang tetap bisa konstanta panel atau sensor yang stabil."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -144,6 +160,24 @@ class ProtocolAdapter(abc.ABC):
     @abc.abstractmethod
     async def close(self) -> None:
         """Tutup sambungan dan lepaskan sumber daya. Idempoten, tidak melempar."""
+
+    async def discover(self) -> list[DiscoveredChannel]:
+        """Cari channel yang sedang berisi nilai, untuk dipilih teknisi.
+
+        Bawaannya menolak: tidak semua perangkat bisa disapu dengan aman, dan
+        menebak-nebak alamat pada perangkat yang tidak mendukungnya hanya
+        membebani. Adapter yang mendukungnya menimpa method ini.
+
+        Hanya channel yang SUDAH berisi nilai yang bisa ditemukan.
+
+        Raises:
+            ProtocolError: tidak didukung, atau pembacaan gagal.
+        """
+        raise ProtocolError(
+            f"adapter {self.name} tidak mendukung pencarian channel",
+            code="protocol.discovery_unsupported",
+            retryable=False,
+        )
 
     async def __aenter__(self) -> ProtocolAdapter:
         await self.connect()

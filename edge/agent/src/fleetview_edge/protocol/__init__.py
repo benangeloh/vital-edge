@@ -7,6 +7,7 @@ tanpa menyandera sisa sistem.
 
 from fleetview_edge.protocol.base import (
     AdapterHealth,
+    DiscoveredChannel,
     LinkState,
     ProtocolAdapter,
     ProtocolNotConnectedError,
@@ -19,6 +20,7 @@ from fleetview_edge.protocol.simulator import EnginePhase, SimulatorAdapter
 
 __all__ = [
     "AdapterHealth",
+    "DiscoveredChannel",
     "EnginePhase",
     "LPA104Adapter",
     "LinkState",

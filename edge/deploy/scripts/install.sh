@@ -182,7 +182,14 @@ fi
 # Config awal: cukup untuk agent menyala dalam mode setup. Identitas kapal
 # diisi lewat Edge Console, bukan dengan menyunting berkas ini.
 if [[ ! -f "${CONFIG_DIR}/edge.yaml" ]]; then
-  cp "${SRC}/edge/agent/config/sensors.example.yaml" "${CONFIG_DIR}/sensors.yaml"
+  # Dimulai kosong: sensor tiap kapal berbeda, dan contoh berisi channel
+  # simulator yang tidak berarti apa-apa untuk LP-A104. Sensor ditambah lewat
+  # Edge Console (halaman Sensor). Contoh lengkap: sensors.example.yaml.
+  cat > "${CONFIG_DIR}/sensors.yaml" <<'YAML'
+# Registry sensor kapal ini. Tambah lewat Edge Console, halaman Sensor.
+# Contoh isi lengkap: edge/agent/config/sensors.example.yaml di repo.
+sensors: []
+YAML
   cat > "${CONFIG_DIR}/edge.yaml" <<YAML
 # Ditulis oleh install.sh. Identitas kapal diisi lewat Edge Console.
 environment: development

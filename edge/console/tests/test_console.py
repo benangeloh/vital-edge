@@ -19,7 +19,7 @@ from fastapi.testclient import TestClient
 
 from fleetview_console import create_console_app
 
-PAGES = ["/", "/sensors", "/sync", "/export", "/network", "/logs", "/config"]
+PAGES = ["/", "/sensors", "/sync", "/network", "/logs", "/config"]
 
 
 def make_client(context: Any) -> TestClient:
@@ -72,7 +72,7 @@ class TestTetapTampilSaatRusak:
             ("/", "sync"),
             ("/sensors", "sensors"),
             ("/sync", "sync"),
-            ("/export", "export_targets"),
+            ("/logs", "export_targets"),
             ("/network", "network"),
             ("/logs", "logs"),
             ("/config", "config"),
@@ -120,7 +120,7 @@ class TestBekerjaTanpaJavascript:
         """Tombol harus tetap bekerja saat JavaScript mati — Console dibuka
         justru ketika banyak hal tidak bekerja."""
         assert '<form method="post" action="/sync/trigger">' in client.get("/sync").text
-        assert 'action="/export/start"' in client.get("/export").text
+        assert 'action="/export/start"' in client.get("/logs").text
 
     def test_penyaring_log_berupa_tautan(self, client: TestClient) -> None:
         text = client.get("/logs").text
@@ -183,14 +183,14 @@ class TestKontenOperasional:
         assert "tidak dihapus" in text  # jaminan yang harus terbaca teknisi
 
     def test_ekspor_menyatakan_data_lokal_tidak_dihapus(self, client: TestClient) -> None:
-        assert "tidak dihapus" in client.get("/export").text
+        assert "tidak dihapus" in client.get("/logs").text
 
     def test_media_tidak_bisa_ditulis_dinonaktifkan(self, client: TestClient) -> None:
-        assert "tidak bisa ditulis" in client.get("/export").text
+        assert "tidak bisa ditulis" in client.get("/logs").text
 
     def test_tanpa_media_memberi_petunjuk(self, make_context: Callable[..., Any]) -> None:
         client = make_client(make_context(empty=True))
-        assert "Colokkan USB" in client.get("/export").text
+        assert "Colokkan USB" in client.get("/logs").text
 
     def test_jaringan_menampilkan_keterjangkauan_central(self, client: TestClient) -> None:
         text = client.get("/network").text
@@ -536,6 +536,28 @@ class TestRincianPenyimpanan:
     ) -> None:
         html = make_client(make_context(fail={"storage_detail"})).get("/logs").text
         assert "Tidak bisa membaca status penyimpanan" in html
+        assert "Log" in html
+
+
+class TestPratinjauData:
+    """Teknisi harus bisa memastikan data benar-benar tersimpan tanpa membuka
+    InfluxDB langsung di :8086 — itulah alasan pratinjau ini ada."""
+
+    def test_titik_terbaru_muncul_di_halaman_log(self, make_context: Callable[..., Any]) -> None:
+        html = make_client(make_context()).get("/logs").text
+        assert "Pratinjau data" in html
+        assert "me_port_rpm" in html
+        assert "742.5" in html
+
+    def test_kosong_memberi_penjelasan(self, make_context: Callable[..., Any]) -> None:
+        html = make_client(make_context(empty=True)).get("/logs").text
+        assert "Belum ada data tersimpan" in html
+
+    def test_kegagalan_tidak_menjatuhkan_halaman_log(
+        self, make_context: Callable[..., Any]
+    ) -> None:
+        html = make_client(make_context(fail={"storage_preview"})).get("/logs").text
+        assert "Tidak bisa membaca pratinjau" in html
         assert "Log" in html
 
 

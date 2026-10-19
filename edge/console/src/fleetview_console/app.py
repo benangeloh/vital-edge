@@ -51,7 +51,6 @@ NAV = [
     ("/", "Ikhtisar"),
     ("/sensors", "Sensor"),
     ("/sync", "Sinkronisasi"),
-    ("/export", "Ekspor Data"),
     ("/network", "Jaringan"),
     ("/logs", "Log"),
     ("/config", "Konfigurasi"),
@@ -80,7 +79,7 @@ def create_console_app(
     environment: str = "development",
 ) -> FastAPI:
     app = FastAPI(
-        title=f"FleetView Edge Console — {ship_name}",
+        title=f"FleetView Edge Console · {ship_name}",
         version=agent_version,
         docs_url=None,  # Dipakai lewat browser oleh teknisi,
         redoc_url=None,  # bukan lewat API explorer.
@@ -208,8 +207,18 @@ def create_console_app(
 
     # -- Sensor -------------------------------------------------------------
 
-    @app.get("/sensors", response_class=HTMLResponse)
-    async def sensors(request: Request) -> HTMLResponse:
+    async def _sensor_page(
+        request: Request,
+        *,
+        found: list[dict[str, Any]] | None = None,
+        found_error: str | None = None,
+        draft: dict[str, str] | None = None,
+    ) -> HTMLResponse:
+        """Halaman Sensor, dengan atau tanpa hasil pencarian.
+
+        Preset dan pencarian opsional: context yang tidak menyediakannya (mis.
+        di pengujian) tetap mendapat formulir lengkap seperti sebelumnya.
+        """
         data, error = await _safe(context.sensors())
         registry, registry_error = None, None
         getter = getattr(context, "sensor_registry", None)
@@ -218,6 +227,15 @@ def create_console_app(
                 registry = getter()
             except Exception as exc:
                 registry_error = str(exc)
+
+        presets: list[dict[str, Any]] | None = None
+        preset_getter = getattr(context, "sensor_presets", None)
+        if callable(preset_getter):
+            try:
+                presets = preset_getter() or None
+            except Exception:
+                log.exception("console.preset_gagal_dibaca")
+
         return page(
             request,
             "sensors.html",
@@ -227,7 +245,75 @@ def create_console_app(
             registry=registry,
             registry_error=registry_error,
             edit=request.query_params.get("edit"),
+            presets=presets,
+            can_discover=callable(getattr(context, "discover_channels", None)),
+            found=found,
+            found_error=found_error,
+            draft=draft or {},
         )
+
+    @app.get("/sensors", response_class=HTMLResponse)
+    async def sensors(request: Request) -> HTMLResponse:
+        return await _sensor_page(request)
+
+    @app.post("/sensors/cari", response_class=HTMLResponse)
+    async def cari_sensor(
+        request: Request,
+        jenis: str = Form(""),
+        sensor_id: str = Form(""),
+        alamat: str = Form(""),
+    ) -> HTMLResponse:
+        """Baca perangkat sebentar dan tampilkan register yang sedang berisi nilai.
+
+        Tombol ini berada di dalam formulir tambah sensor, sehingga isian yang
+        sudah diketik ikut terkirim dan dikembalikan apa adanya. Mengetik nama
+        lalu menekan cari tidak boleh menghapus apa yang sudah diisi.
+
+        POST, bukan GET: pencarian menyentuh perangkat dan bisa memakan beberapa
+        detik, jadi tidak boleh terpicu oleh penyegaran halaman atau pratinjau.
+        Kegagalannya menjadi pesan di formulir, bukan halaman rusak.
+        """
+        draft = {"jenis": jenis.strip(), "sensor_id": sensor_id.strip(), "alamat": alamat.strip()}
+        finder = getattr(context, "discover_channels", None)
+        if not callable(finder):
+            return await _sensor_page(
+                request,
+                found_error="Perangkat ini belum mendukung pencarian sensor.",
+                draft=draft,
+            )
+        try:
+            found = await finder()
+        except FleetViewError as exc:
+            return await _sensor_page(request, found_error=exc.message, draft=draft)
+        except Exception as exc:
+            log.warning("console.cari_sensor_gagal", error=str(exc))
+            return await _sensor_page(request, found_error=str(exc), draft=draft)
+        return await _sensor_page(request, found=found, draft=draft)
+
+    @app.post("/sensors/tambah")
+    async def tambah_sensor(
+        jenis: str = Form(""),
+        sensor_id: str = Form(""),
+        alamat: str = Form(""),
+        channel: str = Form(""),
+    ) -> RedirectResponse:
+        """Formulir sederhana: jenis, nama, dan alamat. Sisanya dari preset."""
+        adder = getattr(context, "add_sensor_simple", None)
+        if not callable(adder):
+            return _sensor_error("Perangkat ini belum mendukung formulir sederhana.")
+        try:
+            adder(
+                jenis=jenis.strip(),
+                sensor_id=sensor_id.strip(),
+                alamat=alamat.strip(),
+                channel=channel.strip(),
+            )
+        except FleetViewError as exc:
+            return _sensor_error(exc.message)
+        except Exception as exc:
+            log.exception("console.sensor_gagal_ditambah")
+            return _sensor_error(str(exc))
+        return RedirectResponse("/sensors?disimpan=1", status_code=303)
 
     @app.post("/sensors/simpan")
     async def simpan_sensor(
@@ -331,20 +417,12 @@ def create_console_app(
             return RedirectResponse("/sync?error=1", status_code=303)
         return RedirectResponse("/sync?triggered=1", status_code=303)
 
-    # -- Ekspor -------------------------------------------------------------
-
-    @app.get("/export", response_class=HTMLResponse)
-    async def export_page(request: Request) -> HTMLResponse:
-        targets, targets_error = await _safe(context.export_targets())
-        sync, _ = await _safe(context.sync())
-        return page(
-            request,
-            "export.html",
-            "/export",
-            targets=targets or [],
-            error=targets_error,
-            sync=sync,
-        )
+    # -- Ekspor ---------------------------------------------------------------
+    #
+    # Tidak punya halaman sendiri — digabung ke Log bersama pratinjau
+    # penyimpanan, supaya teknisi tidak perlu berpindah-pindah menu hanya untuk
+    # melihat "ke mana data ini pergi" dari beberapa sudut (tersimpan di sini,
+    # bisa dibawa keluar dari sini, dan sudah tersalin ke pusat sejauh ini).
 
     @app.post("/export/start")
     async def start_export(request: Request, target: str = Form(...)) -> RedirectResponse:
@@ -353,8 +431,8 @@ def create_console_app(
             log.info("console.export_started", target=target, detail=message)
         except Exception as exc:
             log.warning("console.export_failed", target=target, error=str(exc))
-            return RedirectResponse("/export?error=1", status_code=303)
-        return RedirectResponse("/export?started=1", status_code=303)
+            return RedirectResponse("/logs?error=1", status_code=303)
+        return RedirectResponse("/logs?started=1", status_code=303)
 
     # -- Jaringan -----------------------------------------------------------
 
@@ -368,8 +446,20 @@ def create_console_app(
     @app.get("/logs", response_class=HTMLResponse)
     async def logs(request: Request, level: str | None = None) -> HTMLResponse:
         entries, error = await _safe(context.logs(level=level, limit=200))
-        getter = getattr(context, "storage_detail", None)
-        penyimpanan, penyimpanan_error = await _safe(getter()) if callable(getter) else (None, None)
+
+        detail_getter = getattr(context, "storage_detail", None)
+        penyimpanan, penyimpanan_error = (
+            await _safe(detail_getter()) if callable(detail_getter) else (None, None)
+        )
+
+        preview_getter = getattr(context, "storage_preview", None)
+        pratinjau, pratinjau_error = (
+            await _safe(preview_getter()) if callable(preview_getter) else (None, None)
+        )
+
+        targets, targets_error = await _safe(context.export_targets())
+        sync, _ = await _safe(context.sync())
+
         return page(
             request,
             "logs.html",
@@ -379,6 +469,11 @@ def create_console_app(
             level=level or "",
             penyimpanan=penyimpanan,
             penyimpanan_error=penyimpanan_error,
+            pratinjau=pratinjau or [],
+            pratinjau_error=pratinjau_error,
+            targets=targets or [],
+            targets_error=targets_error,
+            sync=sync,
             sandi=request.query_params.get("sandi"),
             sandi_error=request.query_params.get("sandi_error"),
         )

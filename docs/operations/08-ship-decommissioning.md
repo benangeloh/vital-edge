@@ -27,7 +27,7 @@ sudo sqlite3 /var/lib/fleetview/outbox.db \
 Yang berstatus `pending` harus **nol**. Kalau masih ada, biarkan kapal terhubung
 sampai selesai, atau ambil lewat export USB:
 
-Export dijalankan dari **Edge Console** di kapal (`http://<pi>:8080/export`),
+Export dijalankan dari **Edge Console** di kapal (`http://<pi>:8080/logs`),
 bukan dari baris perintah. Pilih target USB lalu jalankan. Export **tidak**
 menghapus data lokal — ia bukan pengganti ACK, dan outbox tetap `pending` sampai
 central benar-benar mengonfirmasi.
