@@ -43,7 +43,9 @@ class FakeContext:
         adapter: str = "lp_a104",
         influx_token: str = "rahasia-token-influx",
         sandi: str | None = "sandi-admin-influx",
+        sandi_terbuka: str | None = None,
     ) -> None:
+        self._sandi_terbuka = sandi_terbuka
         self.fail = fail or set()
         self.empty = empty
         self.sync_triggered = 0
@@ -68,6 +70,7 @@ class FakeContext:
             "bucket": "telemetry",
             "retention_days": 90,
             "username": "fleetview",
+            "sandi_terbuka": self._sandi_terbuka,
             "sandi_tersimpan": self._sandi is not None,
             "sandi_path": "/etc/fleetview/influx-admin.password",
             "token_terpasang": bool(self._influx_token),

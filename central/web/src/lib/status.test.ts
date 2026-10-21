@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { needsAttention, shipStatus, summarise } from "./status";
+import { needsAttention, shipStatus, sortShips, summarise } from "./status";
 import { makeShip, minutesAgo } from "@/test/factories";
 
 /** Status gabungan inilah jawaban atas "kapal mana yang bermasalah".
@@ -77,5 +77,30 @@ describe("needsAttention", () => {
       makeShip({ ship_id: "besar", last_batch_received_at: minutesAgo(200), pending_estimate: 999 }),
     ]);
     expect(list[0]?.ship_id).toBe("besar");
+  });
+});
+
+describe("sortShips", () => {
+  const sehat = makeShip({ ship_id: "1", name: "KM Alpha" });
+  const offline = makeShip({ ship_id: "2", name: "KM Bravo", last_batch_received_at: minutesAgo(500) });
+  const terganggu = makeShip({ ship_id: "3", name: "KM Charlie", last_batch_received_at: minutesAgo(20) });
+  const sinkron = makeShip({ ship_id: "4", name: "KM Delta", has_gap: true });
+  const nonaktif = makeShip({ ship_id: "5", name: "KM Echo", is_active: false });
+
+  it("yang perlu perhatian di atas, yang sehat di bawah, nonaktif paling akhir", () => {
+    const urut = sortShips([nonaktif, sehat, sinkron, terganggu, offline]).map((s) => s.name);
+    expect(urut).toEqual(["KM Bravo", "KM Charlie", "KM Delta", "KM Alpha", "KM Echo"]);
+  });
+
+  it("status yang sama diurutkan menurut nama", () => {
+    const a = makeShip({ ship_id: "a", name: "KM Zulu" });
+    const b = makeShip({ ship_id: "b", name: "KM Anggrek" });
+    expect(sortShips([a, b]).map((s) => s.name)).toEqual(["KM Anggrek", "KM Zulu"]);
+  });
+
+  it("tidak mengubah array aslinya", () => {
+    const asli = [sehat, offline];
+    sortShips(asli);
+    expect(asli.map((s) => s.name)).toEqual(["KM Alpha", "KM Bravo"]);
   });
 });

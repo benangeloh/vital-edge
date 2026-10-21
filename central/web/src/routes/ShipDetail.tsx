@@ -2,56 +2,47 @@ import { useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { TimeSeriesChart } from "@/components/charts/TimeSeriesChart";
 import { DeviceHealthPanel } from "@/components/health/DeviceHealthPanel";
+import { DateRangeBar } from "@/components/logger/DateRangeBar";
+import { LoggerPanel } from "@/components/logger/LoggerPanel";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { EmptyState, ErrorState, Field, Loading, Panel, Section } from "@/components/ui/Primitives";
 import { absoluteTime, compactNumber, relativeTime, shortId } from "@/lib/format";
+import { PRESETS, presetRange, type LoggerRange } from "@/lib/logger";
 import { useShip, useShipSensors, useSyncStatus, useTelemetry } from "@/lib/queries";
 import { STATUS_META, shipStatus } from "@/lib/status";
 
-const TABS = [
-  "Ringkasan",
-  "Telemetry Langsung",
-  "Telemetry Historis",
-  "Status Sync",
-  "Kesehatan Perangkat",
-  "Alert",
-  "Konfigurasi",
-] as const;
+const TABS = ["Logger", "Grafik", "Status kapal"] as const;
+type Tab = (typeof TABS)[number];
 
-const RANGES = [
-  { label: "1j", seconds: 3600 },
-  { label: "6j", seconds: 21_600 },
-  { label: "24j", seconds: 86_400 },
-  { label: "7h", seconds: 604_800 },
-  { label: "30h", seconds: 2_592_000 },
-];
-
-/** Empat besaran yang paling sering dilihat operator. Warnanya berbeda per
- *  besaran dan konsisten di seluruh aplikasi, sehingga bentuk kurva bisa
+/** Warna per besaran, konsisten di seluruh aplikasi, sehingga bentuk kurva bisa
  *  dikenali tanpa membaca judulnya. */
-const PRIMARY_METRICS = [
-  { metric: "rpm", label: "RPM", color: "var(--green-primary)" },
-  { metric: "fuel_level", label: "Bahan Bakar", color: "var(--status-sync)" },
-  { metric: "pressure", label: "Tekanan", color: "var(--status-warn)" },
-  { metric: "temperature", label: "Suhu", color: "var(--red-brand)" },
-];
+const METRIC_COLORS: Record<string, string> = {
+  rpm: "var(--green-primary)",
+  fuel_level: "var(--status-sync)",
+  pressure: "var(--status-warn)",
+  temperature: "var(--red-brand)",
+};
+
+function initialRange(): LoggerRange {
+  const preset = PRESETS.find((p) => p.id === "24h")!;
+  return { presetId: preset.id, ...presetRange(preset) };
+}
 
 export function ShipDetail() {
   const { shipId } = useParams<{ shipId: string }>();
-  const [tab, setTab] = useState<(typeof TABS)[number]>("Ringkasan");
-  const [range, setRange] = useState(RANGES[2]!);
+  const [tab, setTab] = useState<Tab>("Logger");
+  const [range, setRange] = useState<LoggerRange>(initialRange);
 
   const { data: ship, isLoading, error } = useShip(shipId);
   const { data: sync } = useSyncStatus(shipId);
   const { data: sensors } = useShipSensors(shipId);
-  const { data: telemetry } = useTelemetry(shipId, range.seconds);
+  const { data: telemetry } = useTelemetry(tab === "Grafik" ? shipId : undefined, range);
 
   if (isLoading) return <Loading label="Memuat kapal" />;
   if (error) return <ErrorState error={error} />;
-  if (!ship) return <EmptyState title="Kapal tidak ditemukan" />;
+  if (!ship || !shipId) return <EmptyState title="Kapal tidak ditemukan" />;
 
-  const seriesFor = (metric: string) =>
-    telemetry?.series.find((s) => s.measurement === metric && s.field === "value");
+  const charts = (telemetry?.series ?? []).filter((s) => s.field === "value");
 
   return (
     <>
@@ -66,7 +57,7 @@ export function ShipDetail() {
           {sync && (
             /* Status diturunkan dengan fungsi yang SAMA dengan tabel armada.
                Memakai connection_state mentah dari server membuat halaman ini
-               menampilkan "Online" untuk kapal yang di tabel tertulis offline —
+               menampilkan "Online" untuk kapal yang di tabel tertulis offline:
                dua jawaban berbeda untuk pertanyaan yang sama. */
             <StatusBadge
               meta={
@@ -92,9 +83,13 @@ export function ShipDetail() {
             />
           )}
         </div>
-        <p className="page-sub mono">
-          {ship.slug} · {shortId(ship.ship_id, 13)}
-          {ship.imo_number ? ` · IMO ${ship.imo_number}` : ""}
+        <p className="ship-meta">
+          <span className="mono">{ship.slug}</span>
+          <span>ID {shortId(ship.ship_id, 13)}</span>
+          {ship.imo_number && <span>IMO {ship.imo_number}</span>}
+          {sync?.last_batch_received_at && (
+            <span>Data terakhir {relativeTime(sync.last_batch_received_at)} lalu</span>
+          )}
         </p>
       </div>
 
@@ -114,188 +109,188 @@ export function ShipDetail() {
       </div>
 
       <div role="tabpanel" className="tabpanel">
-        {(tab === "Ringkasan" || tab === "Telemetry Langsung" || tab === "Telemetry Historis") && (
+        {tab === "Logger" && (
           <Section
-            title={tab === "Ringkasan" ? "Telemetry utama" : tab}
-            actions={
-              <div className="filters" role="group" aria-label="Rentang waktu">
-                {RANGES.map((r) => (
-                  <button
-                    key={r.label}
-                    type="button"
-                    className={range.seconds === r.seconds ? "chip chip--on" : "chip"}
-                    aria-pressed={range.seconds === r.seconds}
-                    onClick={() => setRange(r)}
-                  >
-                    {r.label}
-                  </button>
-                ))}
-              </div>
-            }
+            title="Logger data kapal"
+            description="Pembacaan sensor yang dikirim kapal, terbaru di atas. Pilih rentang tanggal untuk melihat data lama."
           >
-            <div className="charts">
-              {PRIMARY_METRICS.map((m) => {
-                const series = seriesFor(m.metric);
-                const last = series?.points.at(-1)?.[1];
-                return (
-                  <Panel key={m.metric}>
-                    <div className="chart__head">
-                      <h3 className="chart__title">{m.label}</h3>
-                      <span className="chart__value tabular">
-                        {typeof last === "number" ? last.toFixed(1) : "—"}
-                        <span className="chart__unit">{series?.unit ?? ""}</span>
-                      </span>
-                    </div>
-                    <TimeSeriesChart series={series} color={m.color} label={m.label} />
-                  </Panel>
-                );
-              })}
+            <LoggerPanel shipId={shipId} shipSlug={ship.slug} />
+          </Section>
+        )}
+
+        {tab === "Grafik" && (
+          <Section title="Grafik sensor" description="Mengikuti rentang tanggal yang dipilih.">
+            <div className="panel logger__controls">
+              <DateRangeBar value={range} onChange={setRange} />
             </div>
+            {charts.length === 0 ? (
+              <EmptyState
+                title="Belum ada data pada rentang ini"
+                hint="Perluas rentang tanggal, atau cek tab Logger untuk memastikan kapal mengirim data."
+              />
+            ) : (
+              <div className="charts">
+                {charts.map((series) => {
+                  const last = series.points.at(-1)?.[1];
+                  return (
+                    <Panel key={`${series.sensor_id}-${series.measurement}`}>
+                      <div className="chart__head">
+                        <h3 className="chart__title">
+                          {series.sensor_id}
+                          <span className="chart__metric"> {series.measurement}</span>
+                        </h3>
+                        <span className="chart__value tabular">
+                          {typeof last === "number" ? last.toFixed(1) : "Tidak ada"}
+                          <span className="chart__unit">{series.unit ?? ""}</span>
+                        </span>
+                      </div>
+                      <TimeSeriesChart
+                        series={series}
+                        color={METRIC_COLORS[series.measurement] ?? "var(--green-primary)"}
+                        label={series.sensor_id}
+                      />
+                    </Panel>
+                  );
+                })}
+              </div>
+            )}
             {telemetry?.bucket_used && telemetry.bucket_used !== "raw" && (
               <p className="note">
-                Ditampilkan sebagai agregat {telemetry.window} ({telemetry.aggregate}), bukan data
-                mentah.
+                Ditampilkan sebagai rata-rata per {telemetry.window}, bukan data mentah. Untuk data
+                mentah, persempit rentang atau buka tab Logger.
               </p>
             )}
           </Section>
         )}
 
-        {tab === "Ringkasan" && (
-          <Section title="Identitas">
-            <Panel>
-              <dl className="fields">
-                <Field label="Nama">{ship.name}</Field>
-                <Field label="Slug">
-                  <span className="mono">{ship.slug}</span>
-                </Field>
-                <Field label="IMO">{ship.imo_number ?? "—"}</Field>
-                <Field label="Call sign">{ship.call_sign ?? "—"}</Field>
-                <Field label="Versi konfigurasi">
-                  <span className="mono">{ship.active_config_version ?? "—"}</span>
-                </Field>
-                <Field label="Sensor terdaftar">{sensors?.length ?? 0}</Field>
-              </dl>
-            </Panel>
-          </Section>
-        )}
-
-        {tab === "Status Sync" && (
-          <Section title="Status sinkronisasi">
-            <Panel>
-              {sync ? (
+        {tab === "Status kapal" && (
+          <>
+            <Section title="Identitas">
+              <Panel>
                 <dl className="fields">
-                  <Field label="Watermark contiguous">
-                    <span className="tabular">{sync.last_contiguous_sequence.toLocaleString("id-ID")}</span>
+                  <Field label="Nama">{ship.name}</Field>
+                  <Field label="Kode kapal">
+                    <span className="mono">{ship.slug}</span>
                   </Field>
-                  <Field label="Sequence tertinggi">
-                    <span className="tabular">{sync.highest_sequence_seen.toLocaleString("id-ID")}</span>
+                  <Field label="IMO">{ship.imo_number ?? "Belum diisi"}</Field>
+                  <Field label="Call sign">{ship.call_sign ?? "Belum diisi"}</Field>
+                  <Field label="Versi konfigurasi">
+                    <span className="mono">{ship.active_config_version ?? "Tidak ada"}</span>
                   </Field>
-                  <Field label="Celah">
-                    {sync.has_gap ? (
-                      <span className="gap-flag">ada — sebagian rentang belum lengkap</span>
-                    ) : (
-                      "tidak ada"
-                    )}
-                  </Field>
-                  <Field label="Total batch">
-                    <span className="tabular">{compactNumber(sync.total_batches)}</span>
-                  </Field>
-                  <Field label="Total record">
-                    <span className="tabular">{compactNumber(sync.total_records)}</span>
-                  </Field>
-                  <Field label="Tertunda di kapal">
-                    <span className="tabular">{compactNumber(sync.pending_estimate)}</span>
-                  </Field>
+                  <Field label="Sensor terdaftar">{sensors?.length ?? 0}</Field>
                 </dl>
-              ) : (
-                <EmptyState title="Belum ada data sinkronisasi" />
-              )}
-            </Panel>
-          </Section>
-        )}
+              </Panel>
+            </Section>
 
-        {tab === "Kesehatan Perangkat" && (
-          <Section
-            title="Kondisi perangkat"
-            description="Dilaporkan kapal lewat heartbeat, bukan dibaca dari pusat."
-          >
-            <DeviceHealthPanel
-              health={sync?.edge_health ?? null}
-              lastHeartbeatAt={sync?.last_heartbeat_at ?? null}
-            />
-          </Section>
-        )}
+            <Section
+              title="Sinkronisasi data"
+              description="Seberapa lengkap data dari kapal sudah sampai di pusat."
+            >
+              <Panel>
+                {sync ? (
+                  <dl className="fields">
+                    <Field label="Urutan data lengkap sampai">
+                      <span className="tabular">
+                        {sync.last_contiguous_sequence.toLocaleString("id-ID")}
+                      </span>
+                    </Field>
+                    <Field label="Urutan tertinggi diterima">
+                      <span className="tabular">
+                        {sync.highest_sequence_seen.toLocaleString("id-ID")}
+                      </span>
+                    </Field>
+                    <Field label="Rentang belum lengkap">
+                      {sync.has_gap ? (
+                        <span className="gap-flag">Ada, sebagian data belum sampai</span>
+                      ) : (
+                        "Tidak ada"
+                      )}
+                    </Field>
+                    <Field label="Total batch">
+                      <span className="tabular">{compactNumber(sync.total_batches)}</span>
+                    </Field>
+                    <Field label="Total pembacaan">
+                      <span className="tabular">{compactNumber(sync.total_records)}</span>
+                    </Field>
+                    <Field label="Menunggu dikirim dari kapal">
+                      <span className="tabular">{compactNumber(sync.pending_estimate)}</span>
+                    </Field>
+                  </dl>
+                ) : (
+                  <EmptyState title="Belum ada data sinkronisasi" />
+                )}
+              </Panel>
+            </Section>
 
-        {tab === "Kesehatan Perangkat" && (
-          <Section title="Perangkat">
-            <Panel flush>
-              <table className="table table--dense">
-                <thead>
-                  <tr>
-                    <th scope="col">Perangkat</th>
-                    <th scope="col">Hardware</th>
-                    <th scope="col">Perangkat lapangan</th>
-                    <th scope="col">Versi agent</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {ship.devices.map((d) => (
-                    <tr key={d.device_id}>
-                      <th scope="row">{d.name}</th>
-                      <td className="muted">{d.hardware ?? "—"}</td>
-                      <td className="muted">{d.field_device ?? "—"}</td>
-                      <td className="mono">{d.agent_version ?? "—"}</td>
+            <Section
+              title="Kondisi perangkat"
+              description="Dilaporkan kapal lewat heartbeat, bukan dibaca dari pusat."
+            >
+              <DeviceHealthPanel
+                health={sync?.edge_health ?? null}
+                lastHeartbeatAt={sync?.last_heartbeat_at ?? null}
+              />
+            </Section>
+
+            <Section title="Perangkat di kapal">
+              <Panel flush>
+                <table className="table table--dense">
+                  <thead>
+                    <tr>
+                      <th scope="col">Perangkat</th>
+                      <th scope="col">Hardware</th>
+                      <th scope="col">Perangkat lapangan</th>
+                      <th scope="col">Versi agent</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-              {ship.devices.length === 0 && <EmptyState title="Belum ada perangkat terdaftar" />}
-            </Panel>
-          </Section>
-        )}
+                  </thead>
+                  <tbody>
+                    {ship.devices.map((d) => (
+                      <tr key={d.device_id}>
+                        <th scope="row">{d.name}</th>
+                        <td className="muted">{d.hardware ?? "Tidak ada"}</td>
+                        <td className="muted">{d.field_device ?? "Tidak ada"}</td>
+                        <td className="mono">{d.agent_version ?? "Tidak ada"}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                {ship.devices.length === 0 && <EmptyState title="Belum ada perangkat terdaftar" />}
+              </Panel>
+            </Section>
 
-        {tab === "Konfigurasi" && (
-          <Section
-            title="Sensor terdaftar"
-            description="Sensor yang belum dikenal didaftarkan otomatis saat pertama terlihat"
-          >
-            <Panel flush>
-              <table className="table table--dense">
-                <thead>
-                  <tr>
-                    <th scope="col">Sensor</th>
-                    <th scope="col">Besaran</th>
-                    <th scope="col">Satuan</th>
-                    <th scope="col">Status</th>
-                    <th scope="col" className="num">Terlihat</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {(sensors ?? []).map((s) => (
-                    <tr key={s.sensor_id}>
-                      <th scope="row" className="mono">{s.sensor_id}</th>
-                      <td>{s.metric}</td>
-                      <td className="muted">{s.unit ?? "—"}</td>
-                      <td className="muted">{s.status}</td>
-                      <td className="num muted" title={absoluteTime(s.last_seen_at)}>
-                        {relativeTime(s.last_seen_at)}
-                      </td>
+            <Section
+              title="Sensor terdaftar"
+              description="Sensor yang belum dikenal didaftarkan otomatis saat pertama terlihat."
+            >
+              <Panel flush>
+                <table className="table table--dense">
+                  <thead>
+                    <tr>
+                      <th scope="col">Sensor</th>
+                      <th scope="col">Besaran</th>
+                      <th scope="col">Satuan</th>
+                      <th scope="col">Status</th>
+                      <th scope="col" className="num">Terlihat</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-              {(sensors ?? []).length === 0 && <EmptyState title="Belum ada sensor terlihat" />}
-            </Panel>
-          </Section>
-        )}
-
-        {tab === "Alert" && (
-          <Section title="Alert kapal ini">
-            <EmptyState
-              title="Belum ada alert"
-              hint="Evaluasi aturan alert dijadwalkan pada fase berikutnya."
-            />
-          </Section>
+                  </thead>
+                  <tbody>
+                    {(sensors ?? []).map((s) => (
+                      <tr key={s.sensor_id}>
+                        <th scope="row" className="mono">{s.sensor_id}</th>
+                        <td>{s.metric}</td>
+                        <td className="muted">{s.unit ?? "Tidak ada"}</td>
+                        <td className="muted">{s.status}</td>
+                        <td className="num muted" title={absoluteTime(s.last_seen_at)}>
+                          {s.last_seen_at ? `${relativeTime(s.last_seen_at)} lalu` : "Belum ada"}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                {(sensors ?? []).length === 0 && <EmptyState title="Belum ada sensor terlihat" />}
+              </Panel>
+            </Section>
+          </>
         )}
       </div>
     </>

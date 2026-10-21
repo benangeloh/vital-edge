@@ -12,8 +12,8 @@
   /* Netral — ini yang paling banyak dipakai. Dashboard tidak berwarna hijau;
      hijau hanya muncul di shell navigasi, aksi utama, dan status sehat. */
   --white: #ffffff;
-  --surface: #f7f8f7;
-  --border: #e4e8e5;
+  --surface: #eef2ef;
+  --border: #d9e1dc;
   --text: #12211c;
   --text-muted: #5c6b64;
   --text-faint: #8a978f;
@@ -44,17 +44,21 @@
   --status-sync-bg: #e9f2fa;
 
   /* Tipografi */
-  --font-sans: Inter, "Segoe UI", system-ui, -apple-system, sans-serif;
+  --font-sans: "Inter Variable", Inter, "Segoe UI", system-ui, -apple-system, sans-serif;
+  /* Judul dan angka besar. Bricolage Grotesque punya karakter sendiri, tidak
+     seperti sans netral yang dipakai semua dasbor; isi halaman tetap Inter
+     supaya tabel dan angka telemetry rapi dan tabular. */
+  --font-display: "Bricolage Grotesque Variable", "Inter Variable", Inter, system-ui, sans-serif;
   --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
 
-  --text-2xs: 0.6875rem;
-  --text-xs: 0.75rem;
-  --text-sm: 0.8125rem;
-  --text-base: 0.875rem;
-  --text-md: 1rem;
-  --text-lg: 1.25rem;
-  --text-xl: 1.75rem;
-  --text-2xl: 2.5rem;
+  --text-2xs: 0.75rem;
+  --text-xs: 0.8125rem;
+  --text-sm: 0.875rem;
+  --text-base: 0.9375rem;
+  --text-md: 1.0625rem;
+  --text-lg: 1.375rem;
+  --text-xl: 2.125rem;
+  --text-2xl: 3rem;
 
   /* Ritme spasi — sengaja tidak seragam. Jarak antar-bagian jauh lebih besar
      daripada jarak di dalam bagian, dan itulah yang membentuk hierarki tanpa
@@ -68,16 +72,17 @@
   --space-7: 3rem;
   --space-8: 4rem;
 
-  --radius: 3px;
-  --radius-lg: 6px;
+  --radius: 6px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
   --border-thin: 1px solid var(--border);
 
   --duration: 150ms;
   --ease: cubic-bezier(0.16, 1, 0.3, 1);
 
-  --sidebar-width: 15rem;
+  --sidebar-width: 17rem;
   --sidebar-width-collapsed: 3.5rem;
-  --topbar-height: 3.25rem;
+  --topbar-height: 4.5rem;
 }
 
 *,

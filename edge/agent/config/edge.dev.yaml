@@ -42,6 +42,7 @@ storage:
   influx_org: fleetview
   influx_bucket: telemetry
   influx_token: fleetview-dev-token    # token stack dev; aman ditulis di sini
+  influx_password: fleetview123   # admin UI :8086; hanya dev, ditolak di produksi
   influx_timeout_seconds: 10.0
   retention_days: 90
   acked_grace_days: 7

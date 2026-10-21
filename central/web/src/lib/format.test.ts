@@ -14,8 +14,8 @@ describe("relativeTime", () => {
   });
 
   it("nilai kosong ditampilkan sebagai strip, bukan error", () => {
-    expect(relativeTime(null, now)).toBe("—");
-    expect(relativeTime("bukan-tanggal", now)).toBe("—");
+    expect(relativeTime(null, now)).toBe("Belum ada");
+    expect(relativeTime("bukan-tanggal", now)).toBe("Belum ada");
   });
 });
 
@@ -35,14 +35,14 @@ describe("compactNumber", () => {
     expect(compactNumber(950)).toBe("950");
     expect(compactNumber(1500)).toBe("1.5 rb");
     expect(compactNumber(2_400_000)).toBe("2.4 jt");
-    expect(compactNumber(null)).toBe("—");
+    expect(compactNumber(null)).toBe("Tidak ada");
   });
 });
 
 describe("shortId", () => {
   it("memotong id panjang", () => {
     expect(shortId("11111111-1111-1111", 8)).toBe("11111111");
-    expect(shortId(null)).toBe("—");
+    expect(shortId(null)).toBe("Belum ada");
   });
 });
 
@@ -59,10 +59,10 @@ describe("formatBytes", () => {
   });
 
   it("nilai kosong atau tidak valid ditampilkan sebagai strip", () => {
-    expect(formatBytes(null)).toBe("—");
-    expect(formatBytes(undefined)).toBe("—");
-    expect(formatBytes(Number.NaN)).toBe("—");
-    expect(formatBytes(-1)).toBe("—");
+    expect(formatBytes(null)).toBe("Tidak tersedia");
+    expect(formatBytes(undefined)).toBe("Tidak tersedia");
+    expect(formatBytes(Number.NaN)).toBe("Tidak tersedia");
+    expect(formatBytes(-1)).toBe("Tidak tersedia");
   });
 });
 
@@ -77,6 +77,6 @@ describe("formatDuration", () => {
   });
 
   it("nilai kosong ditampilkan sebagai strip", () => {
-    expect(formatDuration(null)).toBe("—");
+    expect(formatDuration(null)).toBe("Tidak tersedia");
   });
 });

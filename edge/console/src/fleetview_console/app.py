@@ -26,7 +26,7 @@ import hashlib
 import secrets
 from pathlib import Path
 from typing import Any
-from urllib.parse import quote, urlencode
+from urllib.parse import quote, urlencode, urlsplit
 
 from fastapi import FastAPI, Form, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
@@ -486,6 +486,23 @@ def create_console_app(
 
     # -- Log ----------------------------------------------------------------
 
+    def _tautan_influx(request: Request, url: str | None) -> str | None:
+        """Alamat UI InfluxDB yang bisa dibuka dari perangkat si pembuka Console.
+
+        `127.0.0.1` di config adalah alamat dari sisi agent; dari laptop teknisi
+        itu laptopnya sendiri. Jadi host diambil dari alamat yang dipakai untuk
+        membuka Console, dan hanya skema serta port yang dipertahankan.
+        """
+        if not url:
+            return None
+        asal = urlsplit(url)
+        host = request.url.hostname
+        if not host or not asal.port:
+            return url
+        if ":" in host:
+            host = f"[{host}]"
+        return f"{asal.scheme or 'http'}://{host}:{asal.port}"
+
     async def _pratinjau(sensor: str) -> tuple[list[dict[str, Any]] | None, str | None]:
         """Titik data terbaru, opsional untuk satu sensor saja."""
         preview_getter = getattr(context, "storage_preview", None)
@@ -527,6 +544,7 @@ def create_console_app(
             request,
             "logs.html",
             "/logs",
+            influx_link=_tautan_influx(request, (penyimpanan or {}).get("url")),
             entries=entries or [],
             error=error,
             level=level or "",

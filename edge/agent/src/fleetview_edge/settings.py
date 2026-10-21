@@ -72,6 +72,13 @@ class StorageSettings(BaseModel):
     Console bisa memberitahukannya kepada teknisi yang perlu membuka UI InfluxDB
     di kapal untuk memastikan data benar-benar masuk.
     """
+    influx_password: str = ""
+    """Kata sandi admin InfluxDB, HANYA untuk stack dev di komputer sendiri.
+
+    Bila terisi di development, halaman Log menuliskannya apa adanya supaya
+    tidak perlu membuka docker-compose.yml setiap kali. Ditolak di produksi:
+    di kapal ia tetap di balik PIN, karena Console tidak punya autentikasi.
+    """
     influx_bucket: str = "telemetry"
     influx_token: str = ""
     """Kosong hanya boleh saat pengembangan. Diverifikasi ada di produksi."""
@@ -329,6 +336,11 @@ class EdgeSettings(BaseSettings):
         problems: list[str] = []
         if not self.storage.influx_token:
             problems.append("storage.influx_token kosong")
+        if self.storage.influx_password:
+            problems.append(
+                "storage.influx_password tidak boleh ada di config produksi — "
+                "kata sandi admin disimpan di berkas terpisah dan ditampilkan di balik PIN"
+            )
         if not self.sync.central_url:
             problems.append("sync.central_url kosong")
         if self.log_format != "json":

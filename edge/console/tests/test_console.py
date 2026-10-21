@@ -227,11 +227,11 @@ class TestRingan:
     def test_tidak_ada_sumber_daya_eksternal(self, client: TestClient) -> None:
         """Kapal tidak punya internet. Satu tautan CDN berarti halaman menggantung
         menunggu waktu habis, tepat saat teknisi butuh jawaban cepat."""
-        # Yang diperiksa adalah SUMBER DAYA yang diambil — src= dan href= —
-        # bukan sembarang string "http://" di halaman. Halaman Log sengaja
-        # menampilkan alamat InfluxDB sebagai teks agar teknisi bisa
-        # memastikannya; itu informasi, bukan permintaan jaringan.
-        diambil = re.compile(r'(?:src|href)\s*=\s*["\'](https?:)?//', re.I)
+        # Yang diperiksa adalah SUMBER DAYA yang diambil browser saat memuat
+        # halaman — src= dan href= pada <link> — bukan sembarang "http://".
+        # Halaman Log sengaja menampilkan alamat InfluxDB sebagai teks dan
+        # tautan <a>; itu navigasi atas klik teknisi, bukan permintaan jaringan.
+        diambil = re.compile(r'(?:\bsrc\s*=|<link\b[^>]*\bhref\s*=)\s*["\'](https?:)?//', re.I)
         for path in PAGES:
             text = client.get(path).text
             cocok = diambil.findall(text)
@@ -597,6 +597,29 @@ class TestPratinjauData:
         html = make_client(make_context(fail={"storage_preview"})).get("/logs").text
         assert "Tidak bisa membaca pratinjau" in html
         assert "Log" in html
+
+
+class TestTautanInflux:
+    def test_alamat_influx_berupa_tautan_ke_host_yang_sedang_dibuka(
+        self, make_context: Callable[..., Any]
+    ) -> None:
+        """Di kapal `127.0.0.1` dari sudut laptop teknisi adalah laptopnya
+        sendiri; tautan harus memakai host yang dipakai untuk membuka Console."""
+        html = make_client(make_context()).get("/logs").text
+        assert 'href="http://testserver:8086"' in html
+
+    def test_kata_sandi_terbuka_ditulis_apa_adanya_di_development(
+        self, make_context: Callable[..., Any]
+    ) -> None:
+        html = make_client(make_context(sandi_terbuka="dev-pass")).get("/logs").text
+        assert "dev-pass" in html
+        assert 'name="pin"' not in html
+
+    def test_tanpa_kata_sandi_terbuka_tetap_di_balik_pin(
+        self, make_context: Callable[..., Any]
+    ) -> None:
+        html = make_client(make_context()).get("/logs").text
+        assert 'name="pin"' in html
 
 
 class TestKataSandiInflux:

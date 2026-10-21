@@ -162,8 +162,9 @@ sudo /opt/fleetview/src/edge/deploy/scripts/install.sh
 
 Satu perintah ini mengurus semuanya: prasyarat sistem (`git`, `python3-venv`,
 `sqlite3`, `gnupg`), InfluxDB lokal (dipasang **dan** di-provisioning dengan
-retensi 90 hari, kata sandi acak, dan token yang langsung ditaruh di
-`agent.env`), venv, keempat paket edge, unit systemd, dan config awal. Ia hanya
+retensi 90 hari, kata sandi admin bawaan `fleetview123` yang tertulis di halaman
+Log Console tanpa PIN — ganti dengan `FLEETVIEW_INFLUX_PASSWORD=... sudo -E
+install.sh` bila perlu — dan token yang langsung ditaruh di `agent.env`), venv, keempat paket edge, unit systemd, dan config awal. Ia hanya
 menyalin `edge/`, `shared/`, `docs/`, dan `pyproject.toml` ke direktori rilis —
 kode central ikut ter-clone tetapi tidak pernah dipasang.
 

@@ -12,7 +12,15 @@
     <p class="err" role="alert">Tidak bisa membaca status penyimpanan: {{ penyimpanan_error }}</p>
   {% elif penyimpanan %}
     <dl class="kv">
-      <dt>Alamat</dt><dd class="mono">{{ penyimpanan.url }}</dd>
+      <dt>Alamat</dt>
+      <dd>
+        {% if influx_link %}
+          <a class="mono" href="{{ influx_link }}" target="_blank" rel="noopener">{{ influx_link }}</a>
+          <span class="sub">buka antarmuka InfluxDB di tab baru</span>
+        {% else %}
+          <span class="mono">{{ penyimpanan.url }}</span>
+        {% endif %}
+      </dd>
       <dt>Organisasi</dt><dd class="mono">{{ penyimpanan.org }}</dd>
       <dt>Bucket</dt><dd class="mono">{{ penyimpanan.bucket }}</dd>
       <dt>Umur simpan</dt>
@@ -22,7 +30,10 @@
 
       <dt>Kata sandi</dt>
       <dd>
-        {% if sandi %}
+        {% if penyimpanan.sandi_terbuka %}
+          <span class="mono">{{ penyimpanan.sandi_terbuka }}</span>
+          <span class="sub">Tertulis langsung: InfluxDB ini hanya dipakai perangkat ini dan terjangkau dari jaringan anjungan.</span>
+        {% elif sandi %}
           <span class="mono chip chip--warn">{{ sandi }}</span>
           <span class="sub">Catat sekarang, lalu <a href="/logs">tutup tampilan ini</a></span>
         {% elif not penyimpanan.sandi_tersimpan %}

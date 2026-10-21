@@ -1,24 +1,28 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { FleetBar } from "@/components/FleetBar";
+import { FleetStats } from "@/components/FleetStats";
+import { PAGE_SIZE, Pager } from "@/components/Pager";
 import { ShipTable } from "@/components/ShipTable";
+import { RefreshIcon } from "@/components/shell/nav-icons";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { ErrorState, Loading, Section } from "@/components/ui/Primitives";
-import { relativeTime } from "@/lib/format";
+import { attentionNote } from "@/lib/narrative";
 import { useFleet } from "@/lib/queries";
-import { STATUS_META, needsAttention, shipStatus, summarise, type ShipStatus } from "@/lib/status";
+import {
+  STATUS_META,
+  needsAttention,
+  shipStatus,
+  sortShips,
+  summarise,
+  type ShipStatus,
+} from "@/lib/status";
 
-const STATUS_FILTERS: Array<{ value: ShipStatus | "all"; label: string }> = [
-  { value: "all", label: "Semua" },
-  { value: "online", label: "Online" },
-  { value: "syncing", label: "Sinkron" },
-  { value: "degraded", label: "Terganggu" },
-  { value: "offline", label: "Offline" },
-];
+const ATTENTION_LIMIT = 5;
 
 export function FleetOverview({ search }: { search: string }) {
-  const { data: ships, isLoading, error, refetch } = useFleet();
+  const { data: ships, isLoading, error, refetch, dataUpdatedAt, isFetching } = useFleet();
   const [status, setStatus] = useState<ShipStatus | "all">("all");
+  const [page, setPage] = useState(0);
   const now = Date.now();
 
   const summary = useMemo(() => summarise(ships ?? [], now), [ships, now]);
@@ -36,72 +40,114 @@ export function FleetOverview({ search }: { search: string }) {
           s.ship_id.toLowerCase().includes(needle),
       );
     }
-    return list;
+    return sortShips(list, now);
   }, [ships, status, search, now]);
+
+  // Saringan berubah, kembali ke halaman pertama; kalau tidak, halaman yang
+  // dipilih bisa melewati ujung daftar yang baru dan tabelnya tampak kosong.
+  useEffect(() => setPage(0), [status, search]);
 
   if (isLoading) return <Loading label="Memuat armada" />;
   if (error) return <ErrorState error={error} onRetry={() => refetch()} />;
 
+  const total = ships?.length ?? 0;
+  const pages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const current = Math.min(page, pages - 1);
+  const visible = filtered.slice(current * PAGE_SIZE, (current + 1) * PAGE_SIZE);
+  const hiddenAttention = Math.max(0, attention.length - ATTENTION_LIMIT);
+
   return (
     <>
-      <div className="page-head">
-        <h1 className="page-title">Ringkasan Armada</h1>
-        <p className="page-sub">
-          Diperbarui otomatis tiap 10 detik · {relativeTime(new Date(now).toISOString(), now)} lalu
-        </p>
+      <div className="page-head page-head--split">
+        <div>
+          <h1 className="page-title">Ringkasan armada</h1>
+          <p className="page-sub">Pantau kondisi seluruh kapal SPIL dan buka detail kapal yang perlu dicek.</p>
+        </div>
+        <div className="updated" role="status">
+          <span className="updated__text">
+            <span className="updated__label">Terakhir diperbarui</span>
+            <span className="updated__time tabular">
+              {dataUpdatedAt
+                ? new Date(dataUpdatedAt).toLocaleString("id-ID", {
+                    day: "2-digit",
+                    month: "short",
+                    year: "numeric",
+                    hour: "2-digit",
+                    minute: "2-digit",
+                    second: "2-digit",
+                  })
+                : "Belum ada"}
+            </span>
+          </span>
+          <button
+            type="button"
+            className={isFetching ? "updated__btn updated__btn--busy" : "updated__btn"}
+            onClick={() => refetch()}
+            aria-label="Muat ulang data armada"
+            title="Muat ulang. Data diperbarui otomatis tiap 10 detik."
+          >
+            <RefreshIcon className="updated__icon" />
+          </button>
+        </div>
       </div>
 
-      <FleetBar summary={summary} />
+      <FleetStats summary={summary} selected={status} onSelect={setStatus} />
 
-      {/* Panel ini hanya muncul kalau memang ada yang bermasalah. Panel
+      {/* Bagian ini hanya muncul kalau memang ada yang bermasalah. Panel
           "semua baik" yang selalu tampil justru melatih mata mengabaikannya. */}
       {attention.length > 0 && (
         <Section
-          title="Perlu perhatian"
-          description={`${attention.length} kapal tidak dalam kondisi normal, diurutkan dari yang paling gawat`}
+          title="Perlu tindakan"
+          description={`${attention.length} kapal tidak dalam kondisi normal. Yang paling gawat ada di atas.`}
         >
           <ul className="attention">
-            {attention.slice(0, 6).map((ship) => {
+            {attention.slice(0, ATTENTION_LIMIT).map((ship) => {
               const meta = STATUS_META[shipStatus(ship, now)];
               return (
-                <li key={ship.ship_id} className="attention__row">
-                  <StatusBadge meta={meta} />
-                  <Link to={`/ships/${ship.ship_id}`} className="attention__name">
-                    {ship.name}
+                <li key={ship.ship_id} className={`attention__row attention__row--${meta.tone}`}>
+                  <div className="attention__who">
+                    <Link to={`/ships/${ship.ship_id}`} className="attention__name">
+                      {ship.name}
+                    </Link>
+                    <StatusBadge meta={meta} />
+                  </div>
+                  <p className="attention__note">{attentionNote(ship, now)}</p>
+                  <Link
+                    to={`/ships/${ship.ship_id}`}
+                    className="attention__go"
+                    aria-label={`Buka ${ship.name}`}
+                  >
+                    Buka kapal
                   </Link>
-                  <span className="attention__detail">
-                    data terakhir {relativeTime(ship.last_telemetry_timestamp, now)} lalu
-                    {ship.pending_estimate
-                      ? ` · ${ship.pending_estimate.toLocaleString("id-ID")} tertunda`
-                      : ""}
-                    {ship.has_gap ? " · ada celah sequence" : ""}
-                  </span>
                 </li>
               );
             })}
           </ul>
+          {hiddenAttention > 0 && (
+            <p className="attention__more">
+              Masih ada {hiddenAttention} kapal lain yang perlu perhatian. Lihat di daftar di bawah.
+            </p>
+          )}
         </Section>
       )}
 
       <Section
-        title="Semua kapal"
+        title="Daftar kapal"
+        description={
+          filtered.length === total
+            ? `${total} kapal terdaftar. Yang perlu perhatian ada di atas.`
+            : `Menampilkan ${filtered.length} dari ${total} kapal.`
+        }
         actions={
-          <div className="filters" role="group" aria-label="Saring berdasarkan status">
-            {STATUS_FILTERS.map((f) => (
-              <button
-                key={f.value}
-                type="button"
-                className={status === f.value ? "chip chip--on" : "chip"}
-                aria-pressed={status === f.value}
-                onClick={() => setStatus(f.value)}
-              >
-                {f.label}
-              </button>
-            ))}
-          </div>
+          status !== "all" ? (
+            <button type="button" className="btn btn--outline" onClick={() => setStatus("all")}>
+              Tampilkan semua kapal
+            </button>
+          ) : undefined
         }
       >
-        <ShipTable ships={filtered} now={now} />
+        <ShipTable ships={visible} now={now} />
+        <Pager page={current} total={filtered.length} onPage={setPage} />
       </Section>
     </>
   );

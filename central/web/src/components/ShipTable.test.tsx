@@ -19,26 +19,34 @@ describe("ShipTable", () => {
     expect(link).toHaveAttribute("href", "/ships/11111111-1111-1111-1111-111111111111");
   });
 
-  it("memuat semua kolom yang disyaratkan", () => {
+  it("memuat kolom yang dibutuhkan untuk menilai satu kapal", () => {
     renderTable();
-    for (const header of [
-      "Kapal", "Status", "Data Terakhir", "Sync Terakhir",
-      "Data Tertunda", "Aliran Data", "Alert",
-    ]) {
+    for (const header of ["Status", "Kapal", "Kondisi", "Update Terakhir", "Data Tertunda", "Aksi"]) {
       expect(screen.getByRole("columnheader", { name: header })).toBeInTheDocument();
     }
   });
 
-  it("status tidak hanya bergantung warna — ada label teks", () => {
+  it("status tidak hanya bergantung warna, ada label teks", () => {
     // Penting untuk pengguna buta warna dan untuk layar anjungan yang silau.
     renderTable([makeShip({ last_batch_received_at: minutesAgo(200) })]);
     expect(screen.getByText("Offline")).toBeInTheDocument();
   });
 
-  it("kapal tanpa tunggakan menampilkan strip, bukan nol", () => {
+  it("kondisi ditulis sebagai kalimat, bukan kode", () => {
+    renderTable([makeShip({ last_batch_received_at: minutesAgo(200), last_telemetry_timestamp: minutesAgo(200) })]);
+    expect(screen.getByText(/Tidak ada data sejak 3 jam lalu/)).toBeInTheDocument();
+  });
+
+  it("tombol Lihat detail membawa nama kapal untuk pembaca layar", () => {
+    renderTable();
+    const link = screen.getByRole("link", { name: "Lihat detail KM Sinar Jaya" });
+    expect(link).toHaveAttribute("href", "/ships/11111111-1111-1111-1111-111111111111");
+  });
+
+  it("kapal tanpa tunggakan menampilkan kata, bukan nol atau tanda strip", () => {
     renderTable([makeShip({ pending_estimate: 0 })]);
     const row = screen.getByRole("row", { name: /KM Sinar Jaya/ });
-    expect(within(row).getAllByText("—").length).toBeGreaterThan(0);
+    expect(within(row).getAllByText("Tidak ada").length).toBeGreaterThan(0);
   });
 
   it("tunggakan besar ditandai secara visual", () => {
@@ -46,18 +54,9 @@ describe("ShipTable", () => {
     expect(container.querySelector(".pending--high")).not.toBeNull();
   });
 
-  it("celah sequence ditampilkan, bukan disembunyikan", () => {
+  it("celah sequence ikut disebut di kolom kondisi", () => {
     renderTable([makeShip({ has_gap: true })]);
-    expect(screen.getByText("ada celah")).toBeInTheDocument();
-  });
-
-  it("kolom aliran data tidak mengulang status koneksi mentah", () => {
-    // Server menurunkan connection_state dari waktu kabar terakhir, sama seperti
-    // kolom Status. Menampilkan keduanya menghasilkan baris yang bertentangan
-    // dengan dirinya sendiri — "Terganggu" di sebelah "offline".
-    renderTable([makeShip({ connection_state: "offline", has_gap: false })]);
-    expect(screen.getByText("utuh")).toBeInTheDocument();
-    expect(screen.queryByText("offline")).not.toBeInTheDocument();
+    expect(screen.getByText(/ada rentang belum lengkap/i)).toBeInTheDocument();
   });
 
   it("daftar kosong memberi pesan, bukan tabel kosong tanpa penjelasan", () => {

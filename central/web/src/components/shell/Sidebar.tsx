@@ -1,16 +1,5 @@
 import { NavLink } from "react-router-dom";
-import {
-  AlertIcon,
-  ChevronIcon,
-  ConfigIcon,
-  DeviceIcon,
-  HealthIcon,
-  OverviewIcon,
-  ReportIcon,
-  ShipIcon,
-  SyncIcon,
-  TelemetryIcon,
-} from "@/components/shell/nav-icons";
+import { ChevronIcon, OverviewIcon, ShipIcon } from "@/components/shell/nav-icons";
 
 /** Navigasi utama.
  *
@@ -25,13 +14,6 @@ import {
 const NAV = [
   { to: "/", label: "Ringkasan Armada", end: true, Icon: OverviewIcon },
   { to: "/ships", label: "Kapal", Icon: ShipIcon },
-  { to: "/alerts", label: "Alert", Icon: AlertIcon },
-  { to: "/telemetry", label: "Telemetry", Icon: TelemetryIcon },
-  { to: "/sync", label: "Pusat Sinkronisasi", Icon: SyncIcon },
-  { to: "/devices", label: "Perangkat", Icon: DeviceIcon },
-  { to: "/configuration", label: "Konfigurasi", Icon: ConfigIcon },
-  { to: "/reports", label: "Laporan", Icon: ReportIcon },
-  { to: "/system", label: "Kesehatan Sistem", Icon: HealthIcon },
 ];
 
 export function Sidebar({
@@ -51,21 +33,23 @@ export function Sidebar({
         </span>
       </div>
 
-      <ul className="sidebar__list">
-        {NAV.map((item) => (
-          <li key={item.to}>
-            <NavLink
-              to={item.to}
-              end={item.end}
-              title={item.label}
-              className={({ isActive }) => (isActive ? "navlink navlink--active" : "navlink")}
-            >
-              <item.Icon className="navlink__icon" />
-              <span className="navlink__label">{item.label}</span>
-            </NavLink>
-          </li>
-        ))}
-      </ul>
+      <div className="sidebar__scroll">
+        <ul className="sidebar__list">
+          {NAV.map((item) => (
+            <li key={item.to}>
+              <NavLink
+                to={item.to}
+                end={item.end}
+                title={item.label}
+                className={({ isActive }) => (isActive ? "navlink navlink--active" : "navlink")}
+              >
+                <item.Icon className="navlink__icon" />
+                <span className="navlink__label">{item.label}</span>
+              </NavLink>
+            </li>
+          ))}
+        </ul>
+      </div>
 
       <button
         type="button"

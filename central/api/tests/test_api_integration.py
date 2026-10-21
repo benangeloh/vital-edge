@@ -413,6 +413,134 @@ class TestTelemetryJson:
         assert r.json()["data"]["series"] == []
 
 
+class TestTelemetryReadings:
+    """Tabel logger: pembacaan mentah per baris, dengan rentang tanggal."""
+
+    async def _isi(self, client, seeded, n: int = 5) -> None:
+        token = await _device_token(client)
+        env, payload = _batch(seeded["ship_id"], seeded["device_id"], n=n)
+        r = await client.post(
+            "/api/v1/ingest/batches",
+            content=payload,
+            headers={
+                "Authorization": f"Bearer {token}",
+                "Content-Type": "application/octet-stream",
+                "X-Batch-Envelope": env.model_dump_json(),
+            },
+        )
+        assert r.status_code == 200, r.text
+
+    @staticmethod
+    def _rentang(jam_lalu_mulai: float = 3, jam_lalu_selesai: float = 0) -> str:
+        from datetime import timedelta
+        from urllib.parse import urlencode
+
+        sekarang = now_utc()
+        return urlencode(
+            {
+                "start": (sekarang - timedelta(hours=jam_lalu_mulai)).isoformat(),
+                "stop": (sekarang - timedelta(hours=jam_lalu_selesai)).isoformat(),
+            }
+        )
+
+    async def test_baris_terbaru_dulu_dengan_kolom_logger(self, client, seeded) -> None:
+        await self._isi(client, seeded, n=5)
+        user = await _user_token(client)
+        r = await client.get(
+            f"/api/v1/telemetry/readings?ship_id={seeded['ship_id']}&{self._rentang()}",
+            headers={"Authorization": f"Bearer {user}"},
+        )
+        assert r.status_code == 200, r.text
+        data = r.json()["data"]
+        rows = data["rows"]
+        assert len(rows) == 5
+        assert [x["time"] for x in rows] == sorted((x["time"] for x in rows), reverse=True)
+        assert rows[0]["sensor_id"] == "me_port_rpm"
+        assert rows[0]["metric"] == "rpm"
+        assert rows[0]["unit"] == "rpm"
+        assert isinstance(rows[0]["value"], float)
+        assert data["has_more"] is False
+
+    async def test_halaman_dan_has_more(self, client, seeded) -> None:
+        await self._isi(client, seeded, n=5)
+        user = await _user_token(client)
+        base = f"/api/v1/telemetry/readings?ship_id={seeded['ship_id']}&{self._rentang()}"
+        h = {"Authorization": f"Bearer {user}"}
+        pertama = (await client.get(base + "&limit=2", headers=h)).json()["data"]
+        kedua = (await client.get(base + "&limit=2&offset=2", headers=h)).json()["data"]
+        ketiga = (await client.get(base + "&limit=2&offset=4", headers=h)).json()["data"]
+        assert len(pertama["rows"]) == 2 and pertama["has_more"] is True
+        assert len(kedua["rows"]) == 2 and kedua["has_more"] is True
+        assert len(ketiga["rows"]) == 1 and ketiga["has_more"] is False
+        waktu = [x["time"] for d in (pertama, kedua, ketiga) for x in d["rows"]]
+        assert len(set(waktu)) == 5
+
+    async def test_rentang_di_luar_data_kosong_bukan_error(self, client, seeded) -> None:
+        await self._isi(client, seeded)
+        user = await _user_token(client)
+        r = await client.get(
+            f"/api/v1/telemetry/readings?ship_id={seeded['ship_id']}"
+            f"&{self._rentang(jam_lalu_mulai=48, jam_lalu_selesai=24)}",
+            headers={"Authorization": f"Bearer {user}"},
+        )
+        assert r.status_code == 200
+        assert r.json()["data"]["rows"] == []
+
+    async def test_filter_sensor(self, client, seeded) -> None:
+        await self._isi(client, seeded)
+        user = await _user_token(client)
+        h = {"Authorization": f"Bearer {user}"}
+        base = f"/api/v1/telemetry/readings?ship_id={seeded['ship_id']}&{self._rentang()}"
+        ada = (await client.get(base + "&sensor_id=me_port_rpm", headers=h)).json()["data"]
+        tidak = (await client.get(base + "&sensor_id=sensor_lain", headers=h)).json()["data"]
+        assert len(ada["rows"]) == 5
+        assert tidak["rows"] == []
+
+    @pytest.mark.parametrize("jahat", ['x") |> drop() //', 'a"b', "${env}", "a b"])
+    async def test_sensor_id_berbahaya_ditolak(self, client, seeded, jahat: str) -> None:
+        from urllib.parse import quote
+
+        user = await _user_token(client)
+        r = await client.get(
+            f"/api/v1/telemetry/readings?ship_id={seeded['ship_id']}&{self._rentang()}"
+            f"&sensor_id={quote(jahat)}",
+            headers={"Authorization": f"Bearer {user}"},
+        )
+        assert r.status_code == 422
+
+    async def test_rentang_terbalik_atau_terlalu_panjang_ditolak(self, client, seeded) -> None:
+        user = await _user_token(client)
+        h = {"Authorization": f"Bearer {user}"}
+        terbalik = await client.get(
+            f"/api/v1/telemetry/readings?ship_id={seeded['ship_id']}"
+            f"&{self._rentang(jam_lalu_mulai=1, jam_lalu_selesai=2)}",
+            headers=h,
+        )
+        terlalu_panjang = await client.get(
+            f"/api/v1/telemetry/readings?ship_id={seeded['ship_id']}"
+            f"&{self._rentang(jam_lalu_mulai=24 * 401)}",
+            headers=h,
+        )
+        assert terbalik.status_code == 422
+        assert terlalu_panjang.status_code == 422
+
+    async def test_butuh_login(self, client, seeded) -> None:
+        r = await client.get(
+            f"/api/v1/telemetry/readings?ship_id={seeded['ship_id']}&{self._rentang()}"
+        )
+        assert r.status_code == 401
+
+    async def test_series_menerima_rentang_tanggal(self, client, seeded) -> None:
+        await self._isi(client, seeded)
+        user = await _user_token(client)
+        r = await client.get(
+            f"/api/v1/telemetry/series?ship_id={seeded['ship_id']}&{self._rentang()}",
+            headers={"Authorization": f"Bearer {user}"},
+        )
+        assert r.status_code == 200, r.text
+        assert len(r.json()["data"]["series"][0]["points"]) >= 1
+
+
 class TestAlamatKlienAuditLog:
     """Audit log harus mencatat alamat kapal yang sebenarnya.
 
@@ -585,6 +713,18 @@ class TestOnboardingKapal:
         d = r.json()["data"]
         assert d["ship_id"] and d["device_id"] and d["client_id"] == "ship-900"
         assert d["client_secret"]
+
+    async def test_nama_perangkat_bawaan_netral_terhadap_jenis_komputer(
+        self, seeded, client
+    ) -> None:
+        """Edge Agent bisa berjalan di Raspberry Pi, Ubuntu, atau Windows, jadi
+        nama bawaan tidak boleh menyebut satu jenis perangkat."""
+        token = await _user_token(client)
+        d = (await self._onboard(client, token, slug="SHIP-904")).json()["data"]
+        detail = await client.get(
+            f"/api/v1/ships/{d['ship_id']}", headers={"Authorization": f"Bearer {token}"}
+        )
+        assert detail.json()["data"]["devices"][0]["name"] == "Perangkat Edge #1"
 
     async def test_kredensial_hasil_onboarding_langsung_bisa_dipakai(self, seeded, client) -> None:
         """Inilah yang menentukan apakah fitur ini berguna: Raspberry Pi yang

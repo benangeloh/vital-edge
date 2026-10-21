@@ -133,3 +133,23 @@ export interface SystemHealth {
   checks: Record<string, string>;
   storage?: HostStorage;
 }
+
+/** Satu baris tabel logger: satu pembacaan satu sensor pada satu waktu. */
+export interface ReadingRow {
+  time: string;
+  sensor_id: string;
+  metric: string;
+  field: string;
+  value: number | string;
+  unit: string | null;
+  quality: string | null;
+}
+
+export interface ReadingsResponse {
+  rows: ReadingRow[];
+  has_more: boolean;
+  limit: number;
+  offset: number;
+  start: string;
+  stop: string;
+}

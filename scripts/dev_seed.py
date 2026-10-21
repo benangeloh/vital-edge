@@ -44,12 +44,13 @@ dibuat dengan nilai ini bahkan kalau ada yang mencobanya.
 
 ENV_FILE = Path(".devdata/dev.env")
 SENSORS_FILE = Path(".devdata/sensors.yaml")
-SENSORS_EMPTY = (
-    "# Registry sensor dev — dimulai KOSONG, sama seperti instalasi baru di kapal.\n"
-    "# Tambah sensor lewat Edge Console (http://127.0.0.1:8080/sensors).\n"
-    "# Contoh isi lengkap: edge/agent/config/sensors.example.yaml\n"
-    "sensors: []\n"
-)
+SENSORS_EXAMPLE = Path("edge/agent/config/sensors.example.yaml")
+"""Isi awal registry dev: set sensor lengkap yang dipetakan ke simulator.
+
+Dibuat sekali, sama seperti kapal yang baru dipasang lalu diberi sensornya.
+Supaya logger di central langsung berisi RPM, suhu, tekanan, BBM, dan GPS yang
+bergerak wajar, bukan satu sensor saja.
+"""
 
 
 async def main() -> int:
@@ -129,8 +130,8 @@ async def main() -> int:
     # Console di sesi sebelumnya.
     if not SENSORS_FILE.exists():
         SENSORS_FILE.parent.mkdir(parents=True, exist_ok=True)
-        SENSORS_FILE.write_text(SENSORS_EMPTY)
-        print(f"  {SENSORS_FILE} dibuat kosong")
+        SENSORS_FILE.write_text(SENSORS_EXAMPLE.read_text())
+        print(f"  {SENSORS_FILE} dibuat dari {SENSORS_EXAMPLE}")
 
     return 0
 

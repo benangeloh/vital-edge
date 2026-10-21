@@ -116,3 +116,23 @@ export function ChevronIcon({ className }: IconProps) {
     </svg>
   );
 }
+
+export function SearchIcon({ className }: IconProps) {
+  return (
+    <svg className={className} {...svgProps}>
+      <circle cx="11" cy="11" r="6.5" />
+      <path d="m16 16 4.5 4.5" />
+    </svg>
+  );
+}
+
+export function RefreshIcon({ className }: IconProps) {
+  return (
+    <svg className={className} {...svgProps}>
+      <path d="M20 11a8 8 0 0 0-14.3-4.5L4 8.5" />
+      <path d="M4 4v4.5h4.5" />
+      <path d="M4 13a8 8 0 0 0 14.3 4.5l1.7-2" />
+      <path d="M20 20v-4.5h-4.5" />
+    </svg>
+  );
+}

@@ -92,6 +92,11 @@ class AgentConsoleContext:
             "org": cfg.influx_org,
             "bucket": cfg.influx_bucket,
             "username": cfg.influx_username,
+            # Ditulis apa adanya: perangkat ini satu-satunya yang memakai
+            # InfluxDB-nya dan hanya terjangkau dari jaringan anjungan, jadi
+            # teknisi cukup membacanya di sini. Sumber utama berkas yang ditulis
+            # `install.sh`; config hanya dibaca di development.
+            "sandi_terbuka": self._sandi_terbuka(sandi),
             "sandi_tersimpan": bool(sandi and sandi.exists()),
             "sandi_path": str(sandi) if sandi else None,
             "retention_days": cfg.retention_days,
@@ -124,6 +129,16 @@ class AgentConsoleContext:
         if self._storage is None:
             raise NotImplementedError("penyimpanan belum dirakit — pratinjau tidak tersedia")
         return await self._storage.query_recent(limit=limit, sensor_id=sensor_id)
+
+    def _sandi_terbuka(self, berkas: Path | None) -> str | None:
+        if berkas is not None and berkas.exists():
+            isi = berkas.read_text(encoding="utf-8").strip()
+            if isi:
+                return isi
+        cfg = self._settings.storage
+        if self._settings.environment == "development" and cfg.influx_password:
+            return cfg.influx_password
+        return None
 
     def storage_password(self, pin: str) -> str:
         """Kata sandi admin InfluxDB, di balik PIN perangkat.

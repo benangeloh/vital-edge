@@ -5,9 +5,9 @@
  * Operator membaca kolom ini puluhan kali per menit; bentuk panjang seperti
  * "2 menit yang lalu" membuat kolom melebar dan lebih lambat dipindai. */
 export function relativeTime(iso: string | null | undefined, now = Date.now()): string {
-  if (!iso) return "—";
+  if (!iso) return "Belum ada";
   const then = new Date(iso).getTime();
-  if (Number.isNaN(then)) return "—";
+  if (Number.isNaN(then)) return "Belum ada";
 
   const seconds = Math.max(0, Math.round((now - then) / 1000));
   if (seconds < 60) return `${seconds} dtk`;
@@ -29,16 +29,16 @@ export function staleness(iso: string | null | undefined, now = Date.now()): "fr
 }
 
 export function compactNumber(value: number | null | undefined): string {
-  if (value === null || value === undefined) return "—";
+  if (value === null || value === undefined) return "Tidak ada";
   if (value < 1000) return String(value);
   if (value < 1_000_000) return `${(value / 1000).toFixed(value < 10_000 ? 1 : 0)} rb`;
   return `${(value / 1_000_000).toFixed(1)} jt`;
 }
 
 export function absoluteTime(iso: string | null | undefined): string {
-  if (!iso) return "—";
+  if (!iso) return "Belum ada";
   const date = new Date(iso);
-  if (Number.isNaN(date.getTime())) return "—";
+  if (Number.isNaN(date.getTime())) return "Belum ada";
   return date.toLocaleString("id-ID", {
     day: "2-digit",
     month: "short",
@@ -48,14 +48,14 @@ export function absoluteTime(iso: string | null | undefined): string {
 }
 
 export function shortId(id: string | null | undefined, length = 8): string {
-  return id ? id.slice(0, length) : "—";
+  return id ? id.slice(0, length) : "Belum ada";
 }
 
 const BYTE_UNITS = ["B", "KB", "MB", "GB", "TB", "PB"] as const;
 
 /** Ukuran berkas dalam satuan 1024, berkoma desimal Indonesia: "1,5 KB", "250 GB". */
 export function formatBytes(bytes: number | null | undefined): string {
-  if (bytes === null || bytes === undefined || !Number.isFinite(bytes) || bytes < 0) return "—";
+  if (bytes === null || bytes === undefined || !Number.isFinite(bytes) || bytes < 0) return "Tidak tersedia";
   let value = bytes;
   let unit = 0;
   while (value >= 1024 && unit < BYTE_UNITS.length - 1) {
@@ -70,7 +70,7 @@ export function formatBytes(bytes: number | null | undefined): string {
 /** Durasi ringkas dua satuan terbesar: "3 jam 5 mnt", "2 hr 4 jam". */
 export function formatDuration(seconds: number | null | undefined): string {
   if (seconds === null || seconds === undefined || !Number.isFinite(seconds) || seconds < 0) {
-    return "—";
+    return "Tidak tersedia";
   }
   const total = Math.floor(seconds);
   if (total < 60) return `${total} dtk`;

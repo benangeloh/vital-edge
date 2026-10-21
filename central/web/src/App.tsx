@@ -1,6 +1,6 @@
 import { Suspense, lazy, useEffect, useState } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Route, Routes } from "react-router-dom";
+import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import { Sidebar } from "@/components/shell/Sidebar";
 import { TopBar } from "@/components/shell/TopBar";
 import { FleetOverview } from "@/routes/FleetOverview";
@@ -14,16 +14,9 @@ const ShipDetail = lazy(() =>
   import("@/routes/ShipDetail").then((m) => ({ default: m.ShipDetail })),
 );
 
-import {
-  AlertsPage,
-  DevicesPage,
-  PlaceholderPage,
-  ShipsPage,
-  SyncCenterPage,
-  SystemHealthPage,
-} from "@/routes/Pages";
+import { ShipsPage } from "@/routes/Ships";
 import { auth } from "@/lib/api";
-import { useAlerts, useFleet } from "@/lib/queries";
+import { useFleet } from "@/lib/queries";
 import { needsAttention, summarise } from "@/lib/status";
 
 const client = new QueryClient({
@@ -55,7 +48,6 @@ function Shell() {
   const [search, setSearch] = useState("");
   const [sidebarCollapsed, setSidebarCollapsed] = useState(readSidebarCollapsed);
   const { data: ships } = useFleet();
-  const { data: alerts } = useAlerts();
 
   useEffect(() => {
     try {
@@ -67,7 +59,6 @@ function Shell() {
 
   const summary = ships ? summarise(ships) : undefined;
   const attentionCount = ships ? needsAttention(ships).length : 0;
-  const openAlerts = (alerts ?? []).filter((a) => !a.acknowledged_at).length;
 
   return (
     <div className={sidebarCollapsed ? "app app--sidebar-collapsed" : "app"}>
@@ -84,7 +75,6 @@ function Shell() {
           attentionCount={attentionCount}
           search={search}
           onSearch={setSearch}
-          alertCount={openAlerts}
         />
         <main id="main" className="content" tabIndex={-1}>
           <Routes>
@@ -98,37 +88,7 @@ function Shell() {
                 </Suspense>
               }
             />
-            <Route path="/alerts" element={<AlertsPage />} />
-            <Route
-              path="/telemetry"
-              element={
-                <PlaceholderPage
-                  title="Telemetry"
-                  note="Penjelajah telemetry lintas kapal menyusul. Chart per kapal sudah tersedia di halaman detail kapal."
-                />
-              }
-            />
-            <Route path="/sync" element={<SyncCenterPage />} />
-            <Route path="/devices" element={<DevicesPage />} />
-            <Route
-              path="/configuration"
-              element={
-                <PlaceholderPage
-                  title="Konfigurasi"
-                  note="Penyuntingan konfigurasi berversi menyusul. Riwayat versi per kapal ada di halaman detail kapal."
-                />
-              }
-            />
-            <Route
-              path="/reports"
-              element={
-                <PlaceholderPage
-                  title="Laporan"
-                  note="Laporan menyusul setelah agregasi dan downsampling tersedia."
-                />
-              }
-            />
-            <Route path="/system" element={<SystemHealthPage />} />
+            <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </main>
       </div>

@@ -1,12 +1,13 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, auth } from "./api";
+import { EXPORT_MAX_ROWS, resolveRange, type LoggerRange } from "./logger";
 import type {
-  AlertEvent,
   FleetShip,
+  ReadingRow,
+  ReadingsResponse,
   SensorRow,
   ShipDetail,
   SyncStatus,
-  SystemHealth,
   TelemetryResponse,
 } from "./types";
 
@@ -53,39 +54,79 @@ export function useSyncStatus(shipId: string | undefined) {
   });
 }
 
-export function useTelemetry(shipId: string | undefined, rangeSeconds: number, sensorId?: string) {
+const rangeKey = (range: LoggerRange) =>
+  range.presetId ?? `${range.start.toISOString()}/${range.stop.toISOString()}`;
+
+function rangeParams(shipId: string, range: LoggerRange, sensorId?: string): URLSearchParams {
+  const { start, stop } = resolveRange(range);
+  const params = new URLSearchParams({
+    ship_id: shipId,
+    start: start.toISOString(),
+    stop: stop.toISOString(),
+  });
+  if (sensorId) params.set("sensor_id", sensorId);
+  return params;
+}
+
+/** Grafik. Mengikuti rentang yang sama dengan tabel logger. */
+export function useTelemetry(shipId: string | undefined, range: LoggerRange, sensorId?: string) {
   return useQuery({
-    queryKey: ["telemetry", shipId, rangeSeconds, sensorId ?? ""],
+    queryKey: ["telemetry", shipId, rangeKey(range), sensorId ?? ""],
     queryFn: async () => {
-      const params = new URLSearchParams({
-        ship_id: String(shipId),
-        range_seconds: String(rangeSeconds),
-      });
-      if (sensorId) params.set("sensor_id", sensorId);
+      const params = rangeParams(String(shipId), range, sensorId);
       return (await api.get<TelemetryResponse>(`/api/v1/telemetry/series?${params}`)).data;
     },
     enabled: Boolean(shipId),
+    refetchInterval: range.presetId ? LIVE_REFETCH_MS : false,
     placeholderData: (previous) => previous,
   });
 }
 
-export function useAlerts(shipId?: string) {
+export interface ReadingsQuery {
+  range: LoggerRange;
+  sensorId?: string;
+  offset: number;
+  limit: number;
+}
+
+/** Tabel logger: pembacaan mentah, terbaru dulu. */
+export function useReadings(shipId: string | undefined, q: ReadingsQuery) {
   return useQuery({
-    queryKey: ["alerts", shipId ?? ""],
+    queryKey: ["readings", shipId, rangeKey(q.range), q.sensorId ?? "", q.offset, q.limit],
     queryFn: async () => {
-      const query = shipId ? `?ship_id=${shipId}` : "";
-      return (await api.get<AlertEvent[]>(`/api/v1/alerts${query}`)).data;
+      const params = rangeParams(String(shipId), q.range, q.sensorId);
+      params.set("limit", String(q.limit));
+      params.set("offset", String(q.offset));
+      return (await api.get<ReadingsResponse>(`/api/v1/telemetry/readings?${params}`)).data;
     },
-    refetchInterval: LIVE_REFETCH_MS,
+    enabled: Boolean(shipId),
+    // Hanya halaman pertama dari rentang "sampai sekarang" yang ikut bergerak.
+    refetchInterval: q.range.presetId && q.offset === 0 ? LIVE_REFETCH_MS : false,
+    placeholderData: (previous) => previous,
   });
 }
 
-export function useAcknowledgeAlert() {
-  const client = useQueryClient();
-  return useMutation({
-    mutationFn: (id: string) => api.post(`/api/v1/alerts/${id}/acknowledge`),
-    onSuccess: () => client.invalidateQueries({ queryKey: ["alerts"] }),
-  });
+const EXPORT_PAGE = 1000;
+
+/** Seluruh baris untuk diunduh, dibaca per halaman sampai habis atau mencapai batas. */
+export async function fetchReadingsForExport(
+  shipId: string,
+  range: LoggerRange,
+  sensorId?: string,
+  maxRows = EXPORT_MAX_ROWS,
+): Promise<{ rows: ReadingRow[]; truncated: boolean }> {
+  const rows: ReadingRow[] = [];
+  let offset = 0;
+  while (rows.length < maxRows) {
+    const params = rangeParams(shipId, range, sensorId);
+    params.set("limit", String(Math.min(EXPORT_PAGE, maxRows - rows.length)));
+    params.set("offset", String(offset));
+    const { data } = await api.get<ReadingsResponse>(`/api/v1/telemetry/readings?${params}`);
+    rows.push(...data.rows);
+    if (!data.has_more) return { rows, truncated: false };
+    offset += data.rows.length;
+  }
+  return { rows, truncated: true };
 }
 
 export interface OnboardResult {
@@ -112,14 +153,6 @@ export function useOnboardShip() {
     mutationFn: async (input: OnboardInput) =>
       (await api.post<OnboardResult>("/api/v1/ships/onboard", input)).data,
     onSuccess: () => client.invalidateQueries({ queryKey: ["fleet"] }),
-  });
-}
-
-export function useSystemHealth() {
-  return useQuery({
-    queryKey: ["health"],
-    queryFn: async () => (await api.get<SystemHealth>("/api/v1/health")).data,
-    refetchInterval: 30_000,
   });
 }
 

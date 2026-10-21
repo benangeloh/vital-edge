@@ -124,16 +124,17 @@ if [[ -n "${INFLUX_SIAP}" ]] \
 fi
 
 if [[ -n "${INFLUX_SIAP}" && ! -s "${INFLUX_TOKEN_FILE}" ]]; then
-  # Kata sandi admin tidak pernah dipakai lagi setelah ini; yang dipakai agent
-  # hanya tokennya. Karena itu ia dibuat acak dan tidak disimpan di mana pun.
-  # Kata sandi admin dibuat acak lalu DISIMPAN, tidak dibuang.
+  # Kata sandi admin memakai nilai bawaan yang mudah, dan DISIMPAN.
   #
-  # Agent sendiri hanya memakai token, jadi secara teknis kata sandinya tidak
-  # pernah dibutuhkan lagi. Tetapi teknisi kadang perlu membuka UI InfluxDB di
-  # kapal untuk memastikan data benar-benar masuk, dan kata sandi yang hilang
-  # membuat satu-satunya jalan adalah menyetel ulang lewat terminal — persis
-  # yang ingin dihindari.
-  INFLUX_PASSWORD="$(openssl rand -base64 18 | tr -d '/+=' | cut -c1-16)"
+  # Agent sendiri hanya memakai token. Tetapi teknisi kadang perlu membuka UI
+  # InfluxDB di kapal untuk memastikan data benar-benar masuk, dan kata sandi
+  # yang sulit diingat membuat satu-satunya jalan menyetel ulang lewat terminal.
+  # Perangkat ini satu-satunya pemakai InfluxDB-nya dan hanya terjangkau dari
+  # jaringan anjungan, jadi kata sandi bawaan yang tertulis di halaman Log
+  # (tanpa PIN) dinilai lebih berguna daripada yang acak. Bisa ditimpa lewat
+  # FLEETVIEW_INFLUX_PASSWORD saat menjalankan skrip ini. Minimal 8 karakter
+  # (batas InfluxDB).
+  INFLUX_PASSWORD="${FLEETVIEW_INFLUX_PASSWORD:-fleetview123}"
   if influx setup --skip-verify --force \
        --username fleetview \
        --password "${INFLUX_PASSWORD}" \

@@ -7,13 +7,18 @@ autentikasi, rate limit, dan SLO sendiri.
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from typing import Annotated, Any
 from uuid import UUID
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, HTTPException, Query
 
 from fleetview_central.http.envelope import success
-from fleetview_central.modules.telemetry.service import parse_flux_csv
+from fleetview_central.modules.telemetry.service import (
+    parse_flux_csv,
+    parse_flux_rows,
+    safe_sensor_id,
+)
 from fleetview_central.platform.deps import CurrentUser, Influx
 
 router = APIRouter(prefix="/api/v1/telemetry", tags=["telemetry"])
@@ -35,6 +40,40 @@ yang perlu diperiksa.
 """
 
 
+MAX_RANGE_DAYS = 400
+"""Rentang terpanjang yang boleh diminta sekaligus. Lebih dari retensi mana pun
+yang masuk akal, tetapi cukup untuk mencegah satu permintaan menyapu seluruh
+bucket."""
+
+MAX_READINGS_PAGE = 1000
+
+
+def _utc(value: datetime) -> datetime:
+    # Tanggal tanpa zona dianggap UTC, sama seperti timestamp yang disimpan kapal.
+    return value.replace(tzinfo=UTC) if value.tzinfo is None else value.astimezone(UTC)
+
+
+def _flux_time(value: datetime) -> str:
+    return _utc(value).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def _validated_range(start: datetime, stop: datetime) -> tuple[datetime, datetime]:
+    start, stop = _utc(start), _utc(stop)
+    if stop <= start:
+        raise HTTPException(422, "Tanggal akhir harus setelah tanggal awal.")
+    if (stop - start).days > MAX_RANGE_DAYS:
+        raise HTTPException(422, f"Rentang terlalu panjang, maksimal {MAX_RANGE_DAYS} hari.")
+    return start, stop
+
+
+def _checked_sensor(sensor_id: str | None) -> str | None:
+    if sensor_id is None:
+        return None
+    if safe_sensor_id(sensor_id) is None:
+        raise HTTPException(422, "sensor_id hanya boleh huruf, angka, titik, titik dua, _ dan -.")
+    return sensor_id
+
+
 def _bucket_for(range_seconds: int) -> str:
     for limit, name in _WINDOW_BUCKETS:
         if limit is None or range_seconds <= limit:
@@ -50,14 +89,24 @@ async def series(
     sensor_id: Annotated[str | None, Query()] = None,
     range_seconds: Annotated[int, Query(ge=60, le=31_536_000)] = 3600,
     aggregate: Annotated[str, Query(pattern="^(mean|max|min|last)$")] = "mean",
+    start: Annotated[datetime | None, Query()] = None,
+    stop: Annotated[datetime | None, Query()] = None,
 ) -> dict[str, Any]:
     _ = user
+    sensor_id = _checked_sensor(sensor_id)
+    if (start is None) != (stop is None):
+        raise HTTPException(422, "start dan stop harus diisi bersamaan.")
+    if start is not None and stop is not None:
+        start, stop = _validated_range(start, stop)
+        range_seconds = int((stop - start).total_seconds())
+        range_clause = f"range(start:{_flux_time(start)}, stop:{_flux_time(stop)})"
+    else:
+        range_clause = f"range(start:-{range_seconds}s, stop:{FUTURE_MARGIN})"
     bucket = _bucket_for(range_seconds)
     window = "10s" if bucket == "raw" else ("1m" if bucket == "1m" else "1h")
 
     flux = (
-        f'from(bucket:"telemetry") |> range(start:-{range_seconds}s, stop:{FUTURE_MARGIN}) '
-        f'|> filter(fn:(r) => r.ship_id == "{ship_id}")'
+        f'from(bucket:"telemetry") |> {range_clause} |> filter(fn:(r) => r.ship_id == "{ship_id}")'
     )
     if sensor_id:
         flux += f' |> filter(fn:(r) => r.sensor_id == "{sensor_id}")'
@@ -79,3 +128,48 @@ async def latest(user: CurrentUser, influx: Influx, ship_id: UUID) -> dict[str, 
         f'|> filter(fn:(r) => r.ship_id == "{ship_id}") |> last()'
     )
     return success({"series": parse_flux_csv(await influx.query_csv(flux))})
+
+
+@router.get("/readings", summary="Tabel logger: pembacaan mentah per baris, terbaru dulu")
+async def readings(
+    user: CurrentUser,
+    influx: Influx,
+    ship_id: UUID,
+    start: Annotated[datetime, Query()],
+    stop: Annotated[datetime, Query()],
+    sensor_id: Annotated[str | None, Query()] = None,
+    limit: Annotated[int, Query(ge=1, le=MAX_READINGS_PAGE)] = 200,
+    offset: Annotated[int, Query(ge=0)] = 0,
+) -> dict[str, Any]:
+    """Pembacaan apa adanya dalam rentang tanggal, untuk dibaca teknisi atau diunduh.
+
+    Diminta satu baris lebih banyak dari `limit` untuk menjawab `has_more` tanpa
+    menghitung seluruh rentang, yang pada data satu detik berarti jutaan baris.
+    """
+    _ = user
+    sensor_id = _checked_sensor(sensor_id)
+    start, stop = _validated_range(start, stop)
+
+    flux = (
+        f'from(bucket:"telemetry") |> range(start:{_flux_time(start)}, stop:{_flux_time(stop)}) '
+        f'|> filter(fn:(r) => r.ship_id == "{ship_id}")'
+    )
+    if sensor_id:
+        flux += f' |> filter(fn:(r) => r.sensor_id == "{sensor_id}")'
+    flux += (
+        ' |> keep(columns:["_time","_value","_field","_measurement","sensor_id","unit","quality"])'
+        ' |> group() |> sort(columns:["_time"], desc:true)'
+        f" |> limit(n:{limit + 1}, offset:{offset})"
+    )
+
+    rows = parse_flux_rows(await influx.query_csv(flux))
+    return success(
+        {
+            "rows": rows[:limit],
+            "has_more": len(rows) > limit,
+            "limit": limit,
+            "offset": offset,
+            "start": _flux_time(start),
+            "stop": _flux_time(stop),
+        }
+    )

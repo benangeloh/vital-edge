@@ -1,6 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ApiFailure } from "@/lib/api";
+import {
+  buildInstallScript,
+  installScriptFileName,
+  isReachableFromShip,
+} from "@/lib/installScript";
 import { useOnboardShip, type OnboardResult } from "@/lib/queries";
+import { nextShipCode } from "@/lib/shipCode";
 
 /**
  * Onboarding kapal baru tanpa menyentuh terminal.
@@ -11,7 +17,14 @@ import { useOnboardShip, type OnboardResult } from "@/lib/queries";
  * Menggabungkan keduanya dalam satu layar membuat rahasia itu mudah tertutup
  * tanpa sengaja sebelum sempat disalin.
  */
-export function OnboardShipDialog({ onClose }: { onClose: () => void }) {
+export function OnboardShipDialog({
+  onClose,
+  existingSlugs = [],
+}: {
+  onClose: () => void;
+  /** Kode kapal yang sudah dipakai, untuk menyarankan nomor berikutnya. */
+  existingSlugs?: string[];
+}) {
   const onboard = useOnboardShip();
   const [result, setResult] = useState<OnboardResult | null>(null);
   const dialogRef = useRef<HTMLDivElement>(null);
@@ -41,8 +54,6 @@ export function OnboardShipDialog({ onClose }: { onClose: () => void }) {
         {
           name: String(form.get("name") ?? "").trim(),
           slug: String(form.get("slug") ?? "").trim().toUpperCase(),
-          imo_number: String(form.get("imo") ?? "").trim() || undefined,
-          device_name: String(form.get("device") ?? "").trim() || undefined,
         },
         { onSuccess: setResult },
       );
@@ -65,7 +76,7 @@ export function OnboardShipDialog({ onClose }: { onClose: () => void }) {
               Tambah kapal
             </h2>
             <p className="modal__desc">
-              Mendaftarkan kapal, perangkat Edge, dan kredensialnya sekaligus.
+              Mendaftarkan kapal beserta perangkat Edge dan kredensialnya sekaligus.
             </p>
 
             <label className="formfield">
@@ -78,6 +89,7 @@ export function OnboardShipDialog({ onClose }: { onClose: () => void }) {
                 maxLength={128}
                 placeholder="KM Sinar Jaya"
               />
+              <span className="formfield__hint">Nama resmi kapal, seperti tertulis di dokumen kapal.</span>
             </label>
 
             <label className="formfield">
@@ -88,27 +100,14 @@ export function OnboardShipDialog({ onClose }: { onClose: () => void }) {
                 required
                 maxLength={64}
                 pattern="[A-Za-z0-9\-]+"
-                placeholder="SHIP-071"
+                defaultValue={nextShipCode(existingSlugs)}
                 style={{ textTransform: "uppercase" }}
               />
               <span className="formfield__hint">
-                Dipakai sebagai nama folder ekspor USB. Tidak bisa diubah setelah kapal
-                beroperasi — paket USB lama akan berhenti cocok.
+                Kode internal SPIL, bentuknya SHIP-nomor. Sudah diisi nomor berikutnya yang masih
+                kosong; ubah bila perlu, tetapi tidak boleh sama dengan kapal lain. Kode ini tidak
+                bisa diganti setelah kapal beroperasi karena dipakai sebagai nama folder ekspor USB.
               </span>
-            </label>
-
-            <label className="formfield">
-              <span className="formfield__label">
-                Nomor IMO <span className="formfield__opt">opsional</span>
-              </span>
-              <input className="formfield__input" name="imo" maxLength={16} placeholder="9123456" />
-            </label>
-
-            <label className="formfield">
-              <span className="formfield__label">
-                Nama perangkat <span className="formfield__opt">opsional</span>
-              </span>
-              <input className="formfield__input" name="device" placeholder="Edge Pi #1" />
             </label>
 
             {onboard.error && <OnboardError error={onboard.error} />}
@@ -155,6 +154,8 @@ function CredentialHandover({
 }) {
   const [copied, setCopied] = useState<string | null>(null);
   const [acknowledged, setAcknowledged] = useState(false);
+  const [centralUrl, setCentralUrl] = useState(() => window.location.origin);
+  const [panelHost, setPanelHost] = useState("");
 
   const secretsEnv = [
     `FLEETVIEW_SYNC__DEVICE_CLIENT_ID=${result.client_id}`,
@@ -167,6 +168,10 @@ function CredentialHandover({
     `  ship_name: "${result.name}"`,
     `  device_id: "${result.device_id}"`,
   ].join("\n");
+
+  const fileName = installScriptFileName(result.slug);
+  const urlValid = /^https?:\/\/\S+$/i.test(centralUrl.trim());
+  const urlLocalOnly = urlValid && !isReachableFromShip(centralUrl.trim());
 
   const copy = async (text: string, label: string) => {
     try {
@@ -182,6 +187,25 @@ function CredentialHandover({
     }
   };
 
+  const download = () => {
+    const script = buildInstallScript({
+      shipName: result.name,
+      slug: result.slug,
+      centralUrl: centralUrl.trim().replace(/\/+$/, ""),
+      clientId: result.client_id,
+      secret: result.client_secret,
+      panelHost: panelHost.trim(),
+    });
+    const url = URL.createObjectURL(new Blob([script], { type: "text/x-shellscript" }));
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = fileName;
+    link.click();
+    URL.revokeObjectURL(url);
+    // Skripnya memuat kredensial, jadi mengunduh sama artinya dengan menyimpannya.
+    setAcknowledged(true);
+  };
+
   return (
     <div>
       <h2 className="modal__title" id="onboard-title">
@@ -189,32 +213,114 @@ function CredentialHandover({
       </h2>
       <p className="modal__warn" role="alert">
         Rahasia di bawah <strong>hanya ditampilkan sekali</strong>. Di server ia hanya
-        tersimpan sebagai hash dan tidak bisa dibaca kembali. Salin sekarang ke
-        Raspberry Pi kapal; kalau hilang, terbitkan kredensial baru lalu cabut yang lama.
+        tersimpan sebagai hash dan tidak bisa dibaca kembali. Simpan sekarang; kalau hilang,
+        terbitkan kredensial baru lalu cabut yang lama.
       </p>
 
-      <SnippetBlock
-        title="1. /etc/fleetview/secrets.env"
-        hint="chmod 0600 — jangan dikirim lewat chat atau email"
-        text={secretsEnv}
-        onCopy={() => copy(secretsEnv, "secrets")}
-        copied={copied === "secrets"}
-        secret
-      />
-
-      <SnippetBlock
-        title="2. /etc/fleetview/edge.yaml"
-        hint="identitas kapal; bukan rahasia"
-        text={shipYaml}
-        onCopy={() => copy(shipYaml, "yaml")}
-        copied={copied === "yaml"}
-      />
-
-      {copied === "gagal" && (
-        <p className="formerror" role="status">
-          Browser menolak akses papan klip. Salin manual dari kotak di atas.
+      <section className="autoinstall" aria-labelledby="autoinstall-title">
+        <h3 className="autoinstall__title" id="autoinstall-title">
+          Pasang otomatis dengan satu skrip
+        </h3>
+        <p className="autoinstall__desc">
+          Skrip ini sudah berisi kredensial kapal. Jalankan di komputer kapal, dan semuanya
+          terpasang lalu terhubung ke pusat tanpa ada yang perlu diisi.
         </p>
-      )}
+
+        <label className="formfield">
+          <span className="formfield__label">Alamat pusat</span>
+          <input
+            className="formfield__input"
+            value={centralUrl}
+            onChange={(e) => setCentralUrl(e.target.value)}
+            inputMode="url"
+            autoComplete="off"
+          />
+          <span className="formfield__hint">
+            Alamat server pusat yang bisa dibuka dari kapal, misalnya https://fleetview.spil.co.id.
+          </span>
+        </label>
+        {!urlValid && (
+          <p className="formerror" role="alert">
+            Alamat pusat harus diawali http:// atau https://.
+          </p>
+        )}
+        {urlLocalOnly && (
+          <p className="autoinstall__warn" role="status">
+            Alamat ini hanya dikenal di komputer ini dan tidak akan bisa dijangkau dari kapal.
+            Ganti dengan alamat server pusat sebelum mengunduh.
+          </p>
+        )}
+
+        <label className="formfield">
+          <span className="formfield__label">Alamat IP panel LP-A104</span>
+          <input
+            className="formfield__input"
+            value={panelHost}
+            onChange={(e) => setPanelHost(e.target.value)}
+            placeholder="192.168.100.100"
+            inputMode="decimal"
+            autoComplete="off"
+          />
+          <span className="formfield__hint">
+            Alamat panel di jaringan kapal. Bila dikosongkan, agent berjalan dalam mode
+            simulasi dan datanya bukan data asli.
+          </span>
+        </label>
+
+        <button type="button" className="btn btn--primary" onClick={download} disabled={!urlValid}>
+          Unduh skrip pemasangan
+        </button>
+
+        <ol className="autoinstall__steps">
+          <li>Salin berkas ke komputer kapal, misalnya lewat USB atau scp.</li>
+          <li>
+            Jalankan <code>sudo bash {fileName}</code>
+          </li>
+          <li>Tunggu sampai muncul tulisan "Pemasangan selesai". Skrip menghapus dirinya sendiri.</li>
+        </ol>
+        <p className="autoinstall__note">
+          Untuk Linux: Ubuntu, Debian, dan turunannya seperti Raspberry Pi OS. Windows belum
+          didukung.
+        </p>
+      </section>
+
+      <details className="manual">
+        <summary>Cara manual, tanpa skrip</summary>
+        <SnippetBlock
+          title="1. /etc/fleetview/secrets.env"
+          hint="Rahasia. Batasi akses berkasnya (di Linux: chmod 0600) dan jangan dikirim lewat chat atau email"
+          text={secretsEnv}
+          onCopy={() => copy(secretsEnv, "secrets")}
+          copied={copied === "secrets"}
+          secret
+        />
+        <SnippetBlock
+          title="2. /etc/fleetview/edge.yaml"
+          hint="Identitas kapal, bukan rahasia"
+          text={shipYaml}
+          onCopy={() => copy(shipYaml, "yaml")}
+          copied={copied === "yaml"}
+        />
+        {copied === "gagal" && (
+          <p className="formerror" role="status">
+            Browser menolak akses papan klip. Salin manual dari kotak di atas.
+          </p>
+        )}
+      </details>
+
+      <div className="nextsteps">
+        <p className="nextsteps__title">Setelah terpasang</p>
+        <ol className="nextsteps__list">
+          <li>
+            Buka Edge Console di komputer kapal, halaman Sensor, lalu tambahkan sensor yang
+            terpasang di kapal.
+          </li>
+          <li>
+            Kapal ini berstatus Online di dashboard begitu data pertamanya sampai, dan datanya
+            bisa dilihat di tab Logger.
+          </li>
+        </ol>
+      </div>
 
       <label className="checkfield">
         <input
@@ -222,7 +328,7 @@ function CredentialHandover({
           checked={acknowledged}
           onChange={(e) => setAcknowledged(e.target.checked)}
         />
-        <span>Saya sudah menyalin kredensialnya</span>
+        <span>Saya sudah menyimpan skrip atau kredensialnya</span>
       </label>
 
       <div className="modal__actions">

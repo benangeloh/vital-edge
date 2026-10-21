@@ -24,6 +24,18 @@ export const STATUS_META: Record<ShipStatus, StatusMeta> = {
   inactive: { label: "Nonaktif", glyph: "◌", tone: "idle" },
 };
 
+/** Arti tiap status dalam bahasa biasa, supaya operator baru tidak perlu
+ *  menebak beda "Sinkron" dan "Terganggu". Batasnya mengikuti `shipStatus`. */
+export const STATUS_MEANING: Record<ShipStatus, string> = {
+  online: "Data masuk normal.",
+  syncing: "Terhubung, tetapi masih mengejar data yang tertunda.",
+  degraded: "Kabar terakhir mulai lama, antara 5 menit dan 1 jam.",
+  offline: "Tidak ada kabar lebih dari satu jam.",
+  inactive: "Dinonaktifkan dan tidak dipantau.",
+};
+
+export const STATUS_ORDER: ShipStatus[] = ["online", "syncing", "degraded", "offline", "inactive"];
+
 const PENDING_BACKLOG_THRESHOLD = 500;
 
 export function shipStatus(ship: FleetShip, now = Date.now()): ShipStatus {
@@ -91,4 +103,22 @@ export function summarise(ships: FleetShip[], now = Date.now()): FleetSummary {
     summary.pendingRecords += ship.pending_estimate ?? 0;
   }
   return summary;
+}
+
+/** Urutan daftar kapal: yang perlu perhatian di atas, nonaktif paling akhir.
+ *
+ * Dengan 100 kapal, daftar yang diurut abjad menyembunyikan kapal bermasalah di
+ * halaman ketiga. Di sini yang bermasalah selalu muncul lebih dulu. */
+export function sortShips(ships: FleetShip[], now = Date.now()): FleetShip[] {
+  const rank: Record<ShipStatus, number> = {
+    offline: 0,
+    degraded: 1,
+    syncing: 2,
+    online: 3,
+    inactive: 4,
+  };
+  return [...ships].sort(
+    (a, b) =>
+      rank[shipStatus(a, now)] - rank[shipStatus(b, now)] || a.name.localeCompare(b.name, "id"),
+  );
 }

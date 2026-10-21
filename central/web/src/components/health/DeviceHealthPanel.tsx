@@ -97,7 +97,7 @@ export function DeviceHealthPanel({
         </Field>
         <Field label="Selisih jam">
           <span className="mono">
-            {skew === null ? "—" : `${skew > 0 ? "+" : ""}${skew.toFixed(1).replace(".", ",")} dtk`}
+            {skew === null ? "Tidak diketahui" : `${skew > 0 ? "+" : ""}${skew.toFixed(1).replace(".", ",")} dtk`}
           </span>
         </Field>
       </dl>

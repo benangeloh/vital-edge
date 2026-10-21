@@ -38,7 +38,7 @@ class OnboardShip(BaseModel):
     name: Annotated[str, Field(min_length=1, max_length=128)]
     slug: Annotated[str, Field(min_length=1, max_length=64)]
     imo_number: str | None = None
-    device_name: Annotated[str, Field(min_length=1, max_length=128)] = "Edge Pi #1"
+    device_name: Annotated[str, Field(min_length=1, max_length=128)] = "Perangkat Edge #1"
     hardware: str | None = "Raspberry Pi 4B"
     client_id: Annotated[str | None, Field(max_length=64)] = None
     """Kosongkan agar diturunkan dari slug, mis. SHIP-071 -> ship-071."""

@@ -95,7 +95,7 @@ describe("DeviceHealthPanel", () => {
         now={NOW}
       />,
     );
-    expect(screen.getByText("Uptime perangkat").nextSibling).toHaveTextContent("—");
+    expect(screen.getByText("Uptime perangkat").nextSibling).toHaveTextContent("Tidak tersedia");
     expect(screen.queryByText("0 dtk")).toBeNull();
   });
 
@@ -107,6 +107,6 @@ describe("DeviceHealthPanel", () => {
         now={NOW}
       />,
     );
-    expect(screen.getByText("Selisih jam").nextSibling).toHaveTextContent("—");
+    expect(screen.getByText("Selisih jam").nextSibling).toHaveTextContent("Tidak diketahui");
   });
 });

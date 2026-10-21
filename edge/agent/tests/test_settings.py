@@ -227,6 +227,17 @@ class TestVerifikasiProduksi:
         with pytest.raises(ConfigError, match="sensors_path"):
             s.verify_production_ready()
 
+    def test_kata_sandi_influx_di_config_ditolak_di_produksi(self) -> None:
+        """Kata sandi admin tidak boleh tergeletak di YAML yang ikut disalin
+        saat diagnosis; di kapal ia hanya boleh berada di balik PIN."""
+        s = self._settings(
+            storage={"influx_token": "t", "influx_password": "rahasia"},
+            sync={"central_url": "https://x"},
+            collector={"adapter": "lp_a104", "sensors_path": "/etc/fleetview/sensors.yaml"},
+        )
+        with pytest.raises(ConfigError, match="influx_password"):
+            s.verify_production_ready()
+
     def test_config_produksi_lengkap_lolos(self) -> None:
         self._settings(
             storage={"influx_token": "t"},

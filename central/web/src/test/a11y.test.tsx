@@ -3,12 +3,12 @@ import axe from "axe-core";
 import { MemoryRouter } from "react-router-dom";
 import { describe, expect, it } from "vitest";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { FleetBar } from "@/components/FleetBar";
+import { FleetStats } from "@/components/FleetStats";
 import { OnboardShipDialog } from "@/components/OnboardShipDialog";
 import { ShipTable } from "@/components/ShipTable";
 import { Sidebar } from "@/components/shell/Sidebar";
 import { makeShip, minutesAgo } from "./factories";
-import type { FleetSummary } from "@/lib/status";
+import { summarise } from "@/lib/status";
 
 /** Pemeriksaan aksesibilitas dasar dengan axe-core.
  *
@@ -28,11 +28,6 @@ async function checkA11y(ui: React.ReactElement) {
   return results.violations;
 }
 
-const summary: FleetSummary = {
-  total: 70, online: 52, syncing: 6, degraded: 4, offline: 7, inactive: 1,
-  pendingRecords: 12_400,
-};
-
 describe("aksesibilitas", () => {
   it("tabel armada tanpa pelanggaran", async () => {
     const violations = await checkA11y(
@@ -49,8 +44,15 @@ describe("aksesibilitas", () => {
     expect(violations.map((v) => `${v.id}: ${v.help}`)).toEqual([]);
   });
 
-  it("batang armada tanpa pelanggaran", async () => {
-    const violations = await checkA11y(<FleetBar summary={summary} />);
+  it("ringkasan armada tanpa pelanggaran", async () => {
+    const ships = [
+      makeShip(),
+      makeShip({ ship_id: "b", name: "KM Dua", last_batch_received_at: minutesAgo(200) }),
+      makeShip({ ship_id: "c", name: "KM Tiga", has_gap: true, pending_estimate: 9000 }),
+    ];
+    const violations = await checkA11y(
+      <FleetStats summary={summarise(ships)} selected="all" onSelect={() => {}} />,
+    );
     expect(violations.map((v) => `${v.id}: ${v.help}`)).toEqual([]);
   });
 

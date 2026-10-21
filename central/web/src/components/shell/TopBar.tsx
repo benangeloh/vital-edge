@@ -1,5 +1,6 @@
 import { useNavigate } from "react-router-dom";
 import { auth } from "@/lib/api";
+import { SearchIcon } from "@/components/shell/nav-icons";
 import type { FleetSummary } from "@/lib/status";
 
 /** Bar atas: pencarian global, ringkasan status armada, alert, dan pengguna.
@@ -12,7 +13,6 @@ export function TopBar({
   attentionCount,
   search,
   onSearch,
-  alertCount,
 }: {
   summary?: FleetSummary;
   /** Berasal dari `needsAttention()` yang sama dengan panel di halaman ringkasan.
@@ -21,7 +21,6 @@ export function TopBar({
   attentionCount: number;
   search: string;
   onSearch: (value: string) => void;
-  alertCount: number;
 }) {
   const navigate = useNavigate();
 
@@ -38,11 +37,12 @@ export function TopBar({
         <label htmlFor="global-search" className="sr-only">
           Cari kapal berdasarkan nama, ship ID, atau device ID
         </label>
+        <SearchIcon className="search__icon" />
         <input
           id="global-search"
           type="search"
           className="search__input"
-          placeholder="Cari kapal, ship ID, device ID…"
+          placeholder="Cari kapal, ship ID, atau device ID"
           value={search}
           onChange={(e) => onSearch(e.target.value)}
           autoComplete="off"
@@ -71,16 +71,6 @@ export function TopBar({
             )}
           </div>
         )}
-
-        <button
-          type="button"
-          className="topbar__btn"
-          onClick={() => navigate("/alerts")}
-          aria-label={`Alert${alertCount ? `, ${alertCount} belum diakui` : ", tidak ada"}`}
-        >
-          Alert
-          {alertCount > 0 && <span className="topbar__count tabular">{alertCount}</span>}
-        </button>
 
         <button
           type="button"

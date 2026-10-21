@@ -27,9 +27,14 @@ export function TimeSeriesChart({
   const holder = useRef<HTMLDivElement>(null);
   const chart = useRef<uPlot | null>(null);
 
+  // Satu titik tidak membentuk kurva, dan uPlot menyebarkan sumbu waktunya ke
+  // rentang yang tidak masuk akal. Grafik baru digambar setelah ada dua titik.
+  const numericCount = (series?.points ?? []).filter((p) => typeof p[1] === "number").length;
+  const sparse = numericCount < 2;
+
   useEffect(() => {
     const element = holder.current;
-    if (!element) return;
+    if (!element || sparse) return;
 
     const points = (series?.points ?? []).filter(
       (p): p is [string, number] => typeof p[1] === "number",
@@ -92,7 +97,7 @@ export function TimeSeriesChart({
       chart.current?.destroy();
       chart.current = null;
     };
-  }, [series, height, color, label]);
+  }, [series, height, color, label, sparse]);
 
   const empty = !series || series.points.length === 0;
 
@@ -100,6 +105,9 @@ export function TimeSeriesChart({
     <div className="chart">
       <div ref={holder} className="chart__canvas" aria-hidden="true" />
       {empty && <p className="chart__empty">Belum ada data pada rentang ini</p>}
+      {!empty && sparse && (
+        <p className="chart__empty">Baru ada 1 titik data. Grafik tampil setelah datanya bertambah.</p>
+      )}
       {/* Chart canvas tidak bisa dibaca pembaca layar. Ringkasan teks ini yang
           membuat datanya tetap terjangkau. */}
       <p className="sr-only">
