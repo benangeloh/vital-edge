@@ -309,6 +309,44 @@ class TestPratinjau:
         # Terurut terbaru dulu, bukan urutan CSV apa adanya.
         assert rows[0]["waktu_us"] > rows[1]["waktu_us"]
 
+    async def test_filter_sensor_masuk_ke_query_flux(self) -> None:
+        seen: dict[str, str] = {}
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            seen["body"] = request.content.decode()
+            return httpx.Response(200, text=_CSV_DUA_TITIK)
+
+        await _store(handler).query_recent(limit=20, sensor_id="me_port_rpm")
+
+        assert 'r.sensor_id == "me_port_rpm"' in seen["body"]
+
+    async def test_tanpa_filter_tidak_ada_klausa_sensor(self) -> None:
+        seen: dict[str, str] = {}
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            seen["body"] = request.content.decode()
+            return httpx.Response(200, text=_CSV_DUA_TITIK)
+
+        await _store(handler).query_recent(limit=20)
+
+        assert "sensor_id" not in seen["body"]
+
+    @pytest.mark.parametrize("jahat", ['x") |> drop() //', 'a"b', "${env}", "a b", ""])
+    async def test_sensor_id_tidak_aman_tidak_pernah_sampai_ke_flux(self, jahat: str) -> None:
+        """sensor_id datang dari query string halaman; ia tidak boleh bisa
+        menyuntik Flux. Yang tidak lolos dianggap sensor yang tidak ada."""
+        called = False
+
+        def handler(_r: httpx.Request) -> httpx.Response:
+            nonlocal called
+            called = True
+            return httpx.Response(200, text=_CSV_DUA_TITIK)
+
+        rows = await _store(handler).query_recent(limit=20, sensor_id=jahat)
+
+        assert rows == []
+        assert called is False
+
     async def test_limit_dipotong_di_python(self) -> None:
         """Flux sudah diminta membatasi, tetapi Python memotong lagi setelah
         pengurutan ulang — lihat catatan di docstring `query_recent`."""
@@ -334,13 +372,7 @@ class TestPratinjau:
         """`group()` tidak selalu bisa menyatukan measurement bertipe field
         berbeda menjadi satu tabel — CSV-nya lantas berisi header berulang,
         dipisah baris kosong."""
-        csv = (
-            ",a,b\n"
-            ",1,2\n"
-            "\n"
-            ",x,y,z\n"
-            ",7,8,9\n"
-        )
+        csv = ",a,b\n,1,2\n\n,x,y,z\n,7,8,9\n"
         rows = _parse_annotated_csv(csv)
         assert rows == [{"": "", "a": "1", "b": "2"}, {"": "", "x": "7", "y": "8", "z": "9"}]
 

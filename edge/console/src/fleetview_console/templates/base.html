@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{% block title %}Console{% endblock %} · {{ ship_name }}</title>
-  <link rel="stylesheet" href="/static/console.css">
+  <link rel="stylesheet" href="/static/console.css?v={{ asset_v }}">
 </head>
 <body>
   <a href="#main" class="skip">Lompat ke konten</a>
@@ -35,6 +35,6 @@
   </footer>
 
   <!-- Penyegaran otomatis saja. Setiap halaman sudah lengkap tanpa skrip ini. -->
-  <script src="/static/console.js" defer></script>
+  <script src="/static/console.js?v={{ asset_v }}" defer></script>
 </body>
 </html>

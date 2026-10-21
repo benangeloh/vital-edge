@@ -102,8 +102,10 @@ def parse_uw_channel(channel: str) -> int:
     return alamat
 
 
-DISCOVER_WORDS = 81
-"""UW0-UW80: READ AREA yang terdokumentasi dan sudah terbukti terbaca."""
+DISCOVER_FIRST = 1000
+DISCOVER_WORDS = 100
+"""UW1000-UW1099: awal USER AREA, tempat baris salin sensor ditaruh di ladder
+(Autonics mewajibkan MOV ke UW mulai UW1000). Muat dalam satu permintaan."""
 
 DISCOVER_SETTLE_SECONDS = 6.0
 """Jarak dua pembacaan. Panel memperbarui area UW mengikuti Group Interval
@@ -209,10 +211,9 @@ class LPA104Adapter(ProtocolAdapter):
         return titik
 
     async def discover(self) -> list[DiscoveredChannel]:
-        """Sapu area UW0-UW80 dua kali, lalu laporkan register yang berisi.
+        """Sapu area UW1000-UW1099 dua kali, lalu laporkan register yang berisi.
 
-        Hanya area yang terdokumentasi dan sudah terbukti terbaca; di atas UW81
-        belum pernah diverifikasi pada panel ini. Satu permintaan per pembacaan
+        Hanya blok tempat ladder menyalin data sensor (USER AREA). Satu permintaan per pembacaan
         lewat koneksi yang sama dengan polling, jadi tidak menambah beban sesi
         dan tidak mendekati batas 123 register.
 
@@ -220,11 +221,11 @@ class LPA104Adapter(ProtocolAdapter):
         (mis. RPM saat mesin mati), dan sensor yang belum disalin ke area UW
         lewat ladder — nilainya hidup di area D yang tidak terbaca dari Ethernet.
         """
-        pertama = await self._client.read_range(0, DISCOVER_WORDS)
+        pertama = await self._client.read_range(DISCOVER_FIRST, DISCOVER_WORDS)
         await asyncio.sleep(self._discover_settle)
-        kedua = await self._client.read_range(0, DISCOVER_WORDS)
+        kedua = await self._client.read_range(DISCOVER_FIRST, DISCOVER_WORDS)
         return [
-            DiscoveredChannel(channel=f"UW{i}", value=b, changing=a != b)
+            DiscoveredChannel(channel=f"UW{DISCOVER_FIRST + i}", value=b, changing=a != b)
             for i, (a, b) in enumerate(zip(pertama, kedua, strict=True))
             if a or b
         ]

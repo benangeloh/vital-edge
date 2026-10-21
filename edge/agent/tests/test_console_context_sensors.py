@@ -63,9 +63,9 @@ def test_tambah_sederhana_lp_a104_menghasilkan_baris_ladder(tmp_path: Path) -> N
     ctx.add_sensor_simple(jenis="rpm", sensor_id="me_rpm", alamat="D160")
 
     registry = ctx.sensor_registry()
-    assert registry["sensors"][0]["channel"] == "UW45"
+    assert registry["sensors"][0]["channel"] == "UW1000"
     assert "MOV   D00160" in registry["ladder"]
-    assert "UW00045" in registry["ladder"]
+    assert "UW01000" in registry["ladder"]
 
 
 def test_tambah_sederhana_adapter_simulator_memakai_channel(tmp_path: Path) -> None:

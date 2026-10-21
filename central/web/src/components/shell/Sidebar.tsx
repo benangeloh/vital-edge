@@ -23,7 +23,7 @@ import {
  * `overflow: hidden` seiring rail menyempit, jadi transisinya terasa bergeser
  * alih-alih teks yang tiba-tiba hilang. */
 const NAV = [
-  { to: "/", label: "Ikhtisar Armada", end: true, Icon: OverviewIcon },
+  { to: "/", label: "Ringkasan Armada", end: true, Icon: OverviewIcon },
   { to: "/ships", label: "Kapal", Icon: ShipIcon },
   { to: "/alerts", label: "Alert", Icon: AlertIcon },
   { to: "/telemetry", label: "Telemetry", Icon: TelemetryIcon },

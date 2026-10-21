@@ -508,14 +508,37 @@ class OutboxStore:
 
     def stats(self) -> dict[str, int]:
         with self._lock:
+            # Satu pemindaian outbox untuk jumlah record dan ukuran per status.
+            # Ukuran tidak boleh memakai pemindaian kedua: kunci ini dipakai juga
+            # oleh jalur tulis collector.
             rows = self._conn.execute(
-                "SELECT state, SUM(record_count) AS n FROM outbox GROUP BY state"
+                "SELECT state, SUM(record_count) AS n, SUM(LENGTH(payload)) AS size "
+                "FROM outbox GROUP BY state"
             ).fetchall()
             batches = self._conn.execute(
                 "SELECT state, COUNT(*) AS n FROM batches GROUP BY state"
             ).fetchall()
+            quarantined = self._conn.execute(
+                "SELECT COALESCE(SUM(record_count), 0) AS n FROM batches WHERE state = ?",
+                (BatchState.FAILED.value,),
+            ).fetchone()
+            # Lewat indeks batch_id, jadi hanya menyentuh baris yang dikarantina.
+            stuck_size = self._conn.execute(
+                "SELECT COALESCE(SUM(LENGTH(payload)), 0) AS n FROM outbox "
+                "WHERE batch_id IN (SELECT batch_id FROM batches WHERE state = ?)",
+                (BatchState.FAILED.value,),
+            ).fetchone()
         out = {f"records_{r['state']}": int(r["n"]) for r in rows}
         out.update({f"batches_{r['state']}": int(r["n"]) for r in batches})
+        # Record di dalam batch yang dikarantina. Tidak bisa dibaca dari tabel
+        # outbox: di sana mereka hanya berstatus `batched`, sama dengan batch yang
+        # sedang menunggu giliran kirim.
+        out["quarantined_records"] = int(quarantined["n"])
+        # Ukuran data (gzip JSON), untuk perkiraan KB/MB/GB di Console.
+        acked = RecordState.ACKED.value
+        out["bytes_acked"] = sum(int(r["size"]) for r in rows if r["state"] == acked)
+        out["bytes_unsent"] = sum(int(r["size"]) for r in rows if r["state"] != acked)
+        out["bytes_quarantined"] = int(stuck_size["n"])
         return out
 
     # -- helper -------------------------------------------------------------

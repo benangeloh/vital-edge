@@ -34,6 +34,7 @@ Runbook untuk menjalankan sistem di produksi.
 | **[07 — Onboarding kapal](operations/07-ship-onboarding.md)** | **Alur lengkap kapal baru: daftar di dashboard → siapkan Pi → pasang → data masuk** |
 | [08 — Decommissioning kapal](operations/08-ship-decommissioning.md) | Kapal dijual atau pensiun |
 | [09 — Troubleshooting](operations/09-troubleshooting.md) | Ada yang tidak beres |
+| [10 — SOP panel LP-A](operations/10-sop-panel-lp-a.md) | Tim IoT menyiapkan data panel agar terbaca PC: salin D/M ke UW, setelan CH2 |
 
 ## Tiga aplikasi
 

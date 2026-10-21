@@ -67,14 +67,14 @@ def _lp(klien: _KlienTiruan) -> LPA104Adapter:
 
 class TestLpA104:
     async def test_hanya_register_berisi_yang_dilaporkan(self) -> None:
-        klien = _KlienTiruan({20: 2, 50: 1500, 51: 70}, {20: 2, 50: 1510, 51: 70})
+        klien = _KlienTiruan({1000: 2, 1003: 1500, 1004: 70}, {1000: 2, 1003: 1510, 1004: 70})
 
         found = await _lp(klien).discover()
 
         assert [(f.channel, f.value, f.changing) for f in found] == [
-            ("UW20", 2, False),
-            ("UW50", 1510, True),
-            ("UW51", 70, False),
+            ("UW1000", 2, False),
+            ("UW1003", 1510, True),
+            ("UW1004", 70, False),
         ]
 
     async def test_register_nol_di_kedua_pembacaan_tidak_muncul(self) -> None:
@@ -83,26 +83,26 @@ class TestLpA104:
         assert found == []
 
     async def test_register_yang_baru_terisi_di_pembacaan_kedua_muncul(self) -> None:
-        found = await _lp(_KlienTiruan({}, {60: 5})).discover()
+        found = await _lp(_KlienTiruan({}, {1060: 5})).discover()
 
-        assert [f.channel for f in found] == ["UW60"]
+        assert [f.channel for f in found] == ["UW1060"]
         assert found[0].changing is True
 
     async def test_hanya_membaca_area_terdokumentasi_dalam_satu_permintaan_per_pembacaan(
         self,
     ) -> None:
-        """UW0-UW80 (81 word) muat dalam satu permintaan, jauh di bawah batas 123."""
+        """UW1000-UW1099 (100 word) muat dalam satu permintaan, di bawah batas 123."""
         klien = _KlienTiruan({}, {})
 
         await _lp(klien).discover()
 
-        assert klien.requests == [(0, 81), (0, 81)]
+        assert klien.requests == [(1000, 100), (1000, 100)]
 
     async def test_tidak_butuh_channel_terdaftar(self) -> None:
         adapter = LPA104Adapter(host="panel.test", channels=[], discover_settle_seconds=0)
-        adapter._client = _KlienTiruan({50: 1}, {50: 1})  # type: ignore[assignment]
+        adapter._client = _KlienTiruan({1003: 1}, {1003: 1})  # type: ignore[assignment]
 
-        assert [f.channel for f in await adapter.discover()] == ["UW50"]
+        assert [f.channel for f in await adapter.discover()] == ["UW1003"]
 
     async def test_kegagalan_baca_diteruskan(self) -> None:
         class _Gagal:
@@ -173,22 +173,24 @@ class TestAnnotate:
         assert annotate([_d("UW50")], entries, adapter="lp_a104") == []
 
     def test_blok_sensor_ditandai_dan_diurutkan_lebih_dulu(self) -> None:
-        hasil = annotate([_d("UW20"), _d("UW60"), _d("UW45")], [], adapter="lp_a104")
+        hasil = annotate([_d("UW20"), _d("UW1060"), _d("UW1000")], [], adapter="lp_a104")
 
         assert [(h["channel"], h["likely_sensor"]) for h in hasil] == [
-            ("UW45", True),
-            ("UW60", True),
+            ("UW1000", True),
+            ("UW1060", True),
             ("UW20", False),
         ]
 
-    def test_batas_blok_uw45_sampai_uw80(self) -> None:
-        hasil = annotate([_d("UW44"), _d("UW45"), _d("UW80"), _d("UW81")], [], adapter="lp_a104")
+    def test_batas_blok_uw1000_sampai_uw1099(self) -> None:
+        hasil = annotate(
+            [_d("UW999"), _d("UW1000"), _d("UW1099"), _d("UW1100")], [], adapter="lp_a104"
+        )
 
         assert {h["channel"]: h["likely_sensor"] for h in hasil} == {
-            "UW44": False,
-            "UW45": True,
-            "UW80": True,
-            "UW81": False,
+            "UW999": False,
+            "UW1000": True,
+            "UW1099": True,
+            "UW1100": False,
         }
 
     def test_adapter_lain_semuanya_kemungkinan_sensor(self) -> None:

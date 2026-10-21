@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import re
 from collections.abc import Callable
-from typing import Any
+from typing import Any, ClassVar
 
 import pytest
 from fastapi.testclient import TestClient
@@ -405,3 +405,144 @@ class TestLayarSempit:
 
         assert re.search(r"\.tablewrap[^{]*\{[^}]*position:\s*relative", css)
         assert re.search(r"\.card--flush[^{]*\{[^}]*position:\s*relative", css)
+
+
+class TestCariTanpaPindahHalaman:
+    """Tombol cari memperbarui hanya area hasil lewat fetch, dengan indikator
+    memuat. Tanpa JavaScript, tombol tetap mengirim formulir seperti biasa."""
+
+    HEADER: ClassVar[dict[str, str]] = {"X-Requested-With": "console"}
+
+    def test_permintaan_fetch_mendapat_fragmen_bukan_halaman_penuh(self, ctx: Any) -> None:
+        r = _client(ctx).post("/sensors/cari", headers=self.HEADER)
+
+        assert r.status_code == 200
+        assert "<html" not in r.text
+        assert 'type="radio" name="channel" value="UW50"' in r.text
+
+    def test_permintaan_biasa_tetap_halaman_penuh(self, ctx: Any) -> None:
+        r = _client(ctx).post("/sensors/cari")
+
+        assert "<html" in r.text
+        assert "Daftar sensor terpasang" in r.text
+
+    def test_fragmen_menampilkan_kegagalan_sebagai_pesan(self, ctx: Any) -> None:
+        async def gagal() -> list[dict[str, Any]]:
+            raise RuntimeError("panel tidak membalas")
+
+        ctx.discover_channels = gagal
+
+        r = _client(ctx).post("/sensors/cari", headers=self.HEADER)
+
+        assert r.status_code == 200
+        assert "panel tidak membalas" in r.text
+        assert "<html" not in r.text
+
+    def test_fragmen_tanpa_temuan_dijelaskan(self, ctx: Any) -> None:
+        async def kosong() -> list[dict[str, Any]]:
+            return []
+
+        ctx.discover_channels = kosong
+
+        assert (
+            "Tidak ada channel baru" in _client(ctx).post("/sensors/cari", headers=self.HEADER).text
+        )
+
+    def test_area_hasil_dan_tombol_siap_dipakai_skrip(self, ctx: Any) -> None:
+        form = _formulir_tambah(_client(ctx).get("/sensors").text)
+
+        assert 'id="hasil-cari"' in form
+        assert 'aria-live="polite"' in form
+        tombol = re.search(r"<button[^>]*formaction=\"/sensors/cari\"[^>]*>", form)
+        assert tombol is not None
+        assert "data-cari" in tombol.group(0)
+
+    def test_hasil_pencarian_penuh_dan_fragmen_memakai_markup_yang_sama(self, ctx: Any) -> None:
+        client = _client(ctx)
+        penuh = _formulir_tambah(client.post("/sensors/cari").text)
+        fragmen = client.post("/sensors/cari", headers=self.HEADER).text
+
+        assert fragmen.strip() in penuh
+
+    def test_skrip_menangani_pencarian_dan_tetap_kecil(self, ctx: Any) -> None:
+        js = _client(ctx).get("/static/console.js").text
+
+        assert "data-cari" in js
+        assert "X-Requested-With" in js
+        assert "Mencari" in js
+        assert len(js.encode()) < 4_000
+
+
+class TestCacheAset:
+    """Browser teknisi tidak boleh memakai CSS/JS lama setelah agent di-upgrade."""
+
+    @pytest.mark.parametrize("path", ["/static/console.js", "/static/console.css"])
+    def test_aset_wajib_divalidasi_ulang(self, ctx: Any, path: str) -> None:
+        r = _client(ctx).get(path)
+
+        assert r.status_code == 200
+        assert r.headers["cache-control"] == "no-cache"
+        assert r.headers.get("etag")
+
+    def test_validasi_etag_menghasilkan_304_tanpa_isi(self, ctx: Any) -> None:
+        client = _client(ctx)
+        etag = client.get("/static/console.js").headers["etag"]
+
+        r = client.get("/static/console.js", headers={"If-None-Match": etag})
+
+        assert r.status_code == 304
+        assert r.content == b""
+
+    def test_halaman_html_tidak_ikut_diubah(self, ctx: Any) -> None:
+        assert "cache-control" not in _client(ctx).get("/sensors").headers
+
+
+class TestVersiAset:
+    """Alamat CSS dan JS membawa versi isinya. Browser yang sudah menyimpan salinan
+    lama sebelum header no-cache ada tidak akan memvalidasi ulang alamat yang sama,
+    tetapi pasti mengambil alamat baru."""
+
+    def test_halaman_merujuk_aset_dengan_versi(self, ctx: Any) -> None:
+        html = _client(ctx).get("/sensors").text
+
+        assert re.search(r'src="/static/console\.js\?v=[0-9a-f]{8,}"', html)
+        assert re.search(r'href="/static/console\.css\?v=[0-9a-f]{8,}"', html)
+
+    def test_versi_stabil_antar_permintaan(self, ctx: Any) -> None:
+        client = _client(ctx)
+
+        def versi(html: str) -> str:
+            m = re.search(r"console\.js\?v=([0-9a-f]+)", html)
+            assert m is not None
+            return m.group(1)
+
+        assert versi(client.get("/sensors").text) == versi(client.get("/").text)
+
+    def test_alamat_berversi_tetap_dilayani_tanpa_cache(self, ctx: Any) -> None:
+        r = _client(ctx).get("/static/console.js?v=abcdef12")
+
+        assert r.status_code == 200
+        assert r.headers["cache-control"] == "no-cache"
+
+    def test_versi_berubah_bila_isi_aset_berubah(self, tmp_path: Any) -> None:
+        from fleetview_console.app import asset_version
+
+        (tmp_path / "console.css").write_text("a{}")
+        (tmp_path / "console.js").write_text("var x=1;")
+        awal = asset_version(tmp_path)
+
+        assert awal == asset_version(tmp_path)
+
+        (tmp_path / "console.js").write_text("var x=2;")
+        assert asset_version(tmp_path) != awal
+
+    def test_versi_berubah_bila_css_berubah(self, tmp_path: Any) -> None:
+        from fleetview_console.app import asset_version
+
+        (tmp_path / "console.css").write_text("a{}")
+        (tmp_path / "console.js").write_text("var x=1;")
+        awal = asset_version(tmp_path)
+
+        (tmp_path / "console.css").write_text("b{}")
+
+        assert asset_version(tmp_path) != awal

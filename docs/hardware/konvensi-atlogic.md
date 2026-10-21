@@ -19,7 +19,7 @@ sensor ──CH1 RS-485──> D00160 (area D, PLC)
                           │
                           │  MOV  ← satu baris di ladder, WAJIB
                           ▼
-                       UW00050 (area UW)
+                       UW01000 (area UW)
                           │
                           │  CH2 Modbus TCP Slave, port 502
                           ▼
@@ -51,10 +51,10 @@ menembak endpoint tiap 500 ms meski tidak ada yang mendengar.
 
 ## 2. atLogic — tiap kali menambah sensor
 
-### Alamat tujuan: pakai UW45–UW80
+### Alamat tujuan: pakai UW1000–UW1099
 
 Dipetakan langsung dari panel. Yang **sudah terpakai** panel: D0, D7–D14, D18,
-D20, D33, D34, D39, D41–D44, D81. Blok bebas terbesar adalah **UW45–UW80**.
+D20, D33, D34, D39, D41–D44, D81. Blok bebas terbesar adalah **UW1000–UW1099**.
 
 Di atas UW81 memang kosong, tetapi belum pernah diverifikasi bisa dibaca lewat
 Modbus pada panel ini. Kalau butuh lebih dari 36 titik, uji satu alamat di atas
@@ -68,7 +68,7 @@ Edge Console **menghasilkan blok ini otomatis** — halaman **Sensor**, kotak
 
 ```
 LOAD  M000020
-MOV   D00160   UW00050      ; me_port_rpm
+MOV   D00160   UW01000      ; me_port_rpm
 LOAD  M000020
 MOV   D00108   UW00051      ; fw_temp
 LOAD  M000020
@@ -119,7 +119,7 @@ Dua jalan, tergantung apakah baris salin di ladder sudah ada.
 1. Pada langkah 1, isi **alamat sumber di panel** (`D00xxx`). Pada langkah 2, pilih
    **jenis sensor** dan beri **nama**.
    Besaran, satuan, skala, batas wajar, dan alamat `UW` tujuan ditentukan sistem
-   (blok UW45–UW80, dipilih yang bebas berikutnya).
+   (blok UW1000–UW1099, dipilih yang bebas berikutnya).
 2. **Salin blok ladder** yang muncul di halaman itu
 3. **Tempel ke atLogic**, sebelum `END`, lalu download ke panel
 4. **Restart agent**: `sudo systemctl restart fleetview-agent`
@@ -128,7 +128,7 @@ Dua jalan, tergantung apakah baris salin di ladder sudah ada.
 **B. Sensor yang barisnya sudah ada di ladder**: tombol **Cari di perangkat**, di dalam formulir yang sama:
 
 1. Pada langkah 1 (Alamat sensor), tekan **Cari di perangkat**. Console membaca
-   UW0–UW80 dua kali (jarak sekitar 6 detik) dan menampilkan register yang berisi
+   UW1000–UW1099 dua kali (jarak sekitar 6 detik) dan menampilkan register yang berisi
    nilai dan belum terdaftar.
 2. Pilih register yang dimaksud, lalu pada langkah 2 pilih jenis dan beri nama.
 3. Tekan **Tambah sensor**, restart agent, lalu periksa seperti di atas.
@@ -139,7 +139,7 @@ Batas pencarian, supaya tidak mengira lebih dari yang bisa:
   (mis. RPM saat mesin mati) tidak terlihat.
 - Sensor yang **belum disalin ke area UW** tidak terlihat sama sekali: nilainya
   hidup di area `D`, yang tidak terbaca dari Ethernet. Jalan A tetap dibutuhkan.
-- Arti register tidak ditebak. Register di luar UW45–UW80 ditandai
+- Arti register tidak ditebak. Register di luar UW1000–UW1099 ditandai
   "kemungkinan bawaan panel" (mis. UW20 yang selalu 2).
 - Dibangun dan diuji terhadap klien Modbus tiruan, **belum terhadap panel asli**.
   Percobaan pertama di panel sungguhan sebaiknya diamati.

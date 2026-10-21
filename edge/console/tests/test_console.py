@@ -86,7 +86,7 @@ class TestTetapTampilSaatRusak:
         assert response.status_code == 200
         assert "tidak tersedia" in response.text
 
-    def test_ikhtisar_tetap_menampilkan_sync_saat_sistem_rusak(
+    def test_ringkasan_tetap_menampilkan_sync_saat_sistem_rusak(
         self, make_context: Callable[..., Any]
     ) -> None:
         """Bagian yang masih bisa dibaca harus tetap terbaca — itu inti
@@ -154,7 +154,7 @@ class TestBekerjaTanpaJavascript:
 
 
 class TestKontenOperasional:
-    def test_ikhtisar_menampilkan_semua_metrik_yang_disyaratkan(self, client: TestClient) -> None:
+    def test_ringkasan_menampilkan_semua_metrik_yang_disyaratkan(self, client: TestClient) -> None:
         text = client.get("/").text
         for expected in ("Collector", "InfluxDB", "Penyimpanan", "CPU", "Memori", "Suhu"):
             assert expected in text
@@ -552,6 +552,44 @@ class TestPratinjauData:
     def test_kosong_memberi_penjelasan(self, make_context: Callable[..., Any]) -> None:
         html = make_client(make_context(empty=True)).get("/logs").text
         assert "Belum ada data tersimpan" in html
+
+    def test_penyaring_sensor_menyempitkan_tabel(self, make_context: Callable[..., Any]) -> None:
+        html = make_client(make_context()).get("/logs?sensor=me_port_rpm").text
+        assert "742.5" in html
+        assert "-7.2575" not in html
+
+    def test_penyaring_sensor_menandai_pilihan_aktif(
+        self, make_context: Callable[..., Any]
+    ) -> None:
+        html = make_client(make_context()).get("/logs?sensor=me_port_rpm").text
+        assert 'href="/logs?sensor=me_port_rpm"' in html
+        assert 'aria-current="true"' in html
+
+    def test_sensor_tanpa_data_dijelaskan_bukan_dianggap_rusak(
+        self, make_context: Callable[..., Any]
+    ) -> None:
+        html = make_client(make_context()).get("/logs?sensor=tidak_ada").text
+        assert "Belum ada data tersimpan untuk sensor ini" in html
+
+    def test_pratinjau_menyegarkan_diri_dengan_penyaring_yang_sama(
+        self, make_context: Callable[..., Any]
+    ) -> None:
+        html = make_client(make_context()).get("/logs?sensor=me_port_rpm").text
+        assert 'data-refresh="/partials/pratinjau?sensor=me_port_rpm"' in html
+
+    def test_fragmen_pratinjau_tanpa_kerangka_halaman(
+        self, make_context: Callable[..., Any]
+    ) -> None:
+        response = make_client(make_context()).get("/partials/pratinjau?sensor=me_port_rpm")
+        assert response.status_code == 200
+        assert "<html" not in response.text
+        assert "742.5" in response.text
+        assert "-7.2575" not in response.text
+
+    def test_fragmen_pratinjau_gagal_jadi_pesan(self, make_context: Callable[..., Any]) -> None:
+        response = make_client(make_context(fail={"storage_preview"})).get("/partials/pratinjau")
+        assert response.status_code == 200
+        assert "Tidak bisa membaca pratinjau" in response.text
 
     def test_kegagalan_tidak_menjatuhkan_halaman_log(
         self, make_context: Callable[..., Any]

@@ -7,7 +7,7 @@ import { FleetOverview } from "@/routes/FleetOverview";
 import { Login } from "@/routes/Login";
 
 // Detail kapal dimuat terpisah. Di situlah uPlot dipakai, dan halaman yang
-// paling sering dibuka operator — ikhtisar armada — tidak membutuhkannya.
+// paling sering dibuka operator — ringkasan armada — tidak membutuhkannya.
 // Memuatnya di bundel utama berarti setiap kali dashboard dibuka, kode chart
 // ikut diunduh meski belum tentu dipakai.
 const ShipDetail = lazy(() =>

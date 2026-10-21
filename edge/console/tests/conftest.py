@@ -77,12 +77,14 @@ class FakeContext:
             "tersangga": 0,
         }
 
-    async def storage_preview(self, *, limit: int = 20) -> list[dict[str, Any]]:
+    async def storage_preview(
+        self, *, limit: int = 20, sensor_id: str | None = None
+    ) -> list[dict[str, Any]]:
         self._guard("storage_preview")
         if self.empty:
             return []
         now = now_micros()
-        return [
+        rows = [
             {
                 "waktu_us": now - 2_000_000,
                 "sensor_id": "me_port_rpm",
@@ -98,6 +100,9 @@ class FakeContext:
                 "nilai": -7.2575,
             },
         ]
+        if sensor_id:
+            rows = [r for r in rows if r["sensor_id"] == sensor_id]
+        return rows[:limit]
 
     def storage_password(self, pin: str) -> str:
         self._guard("storage_password")

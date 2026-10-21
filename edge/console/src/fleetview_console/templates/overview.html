@@ -1,7 +1,7 @@
 {% extends "base.html" %}
-{% block title %}Ikhtisar{% endblock %}
+{% block title %}Ringkasan{% endblock %}
 {% block content %}
-<h1 class="h1">Ikhtisar</h1>
+<h1 class="h1">Ringkasan</h1>
 
 <section class="card">
   <h2 class="h2">Identitas</h2>
@@ -20,29 +20,58 @@
 </section>
 
 <section class="card">
-  <h2 class="h2">Sinkronisasi</h2>
+  <h2 class="h2">Pengiriman data ke pusat</h2>
   {% if sync_error %}
-    <p class="err" role="alert">Tidak bisa membaca status sync: {{ sync_error }}</p>
+    <p class="err" role="alert">Tidak bisa membaca status pengiriman: {{ sync_error }}</p>
   {% elif sync %}
-    <dl class="kv">
-      <dt>Data tertunda</dt>
-      <dd class="tabular {% if sync.pending_records > 10000 %}is-warn{% endif %}">
-        {{ sync.pending_records | number }} record
-      </dd>
-      <dt>Tertua belum terkirim</dt>
-      <dd class="tabular">{{ sync.oldest_pending_age_seconds | duration }}</dd>
-      <dt>Sync berhasil terakhir</dt>
-      <dd class="tabular">{{ sync.last_success_us | relative_us }} lalu</dd>
-      <dt>Transport aktif</dt>
-      <dd>{{ sync.active_transport or "tidak ada" }}</dd>
-    </dl>
-    {% if sync.quarantined_batches %}
+    {% set terkirim = sync.records_acked %}
+    {% set belum = sync.pending_records + sync.records_stuck %}
+    {% set total = terkirim + belum %}
+    {% set persen = (terkirim * 100 / total) if total else none %}
+
+    <p>
+      {% if sync.records_stuck %}<span class="chip chip--warn">▲ Ada data tertahan</span>
+      {% elif sync.pending_records %}<span class="chip chip--idle">● Sedang mengirim</span>
+      {% else %}<span class="chip chip--ok">● Semua data sudah terkirim</span>{% endif %}
+    </p>
+
+    <div class="grid">
+      <div class="stat">
+        <span class="stat__label">Sudah terkirim</span>
+        <span class="stat__value tabular">{{ terkirim | number }}</span>
+        <span class="stat__note">sekitar {{ sync.acked_size_bytes | bytes_human }}, tersimpan di pusat ({{ sync.acked_window_days }} hari terakhir)</span>
+      </div>
+      <div class="stat">
+        <span class="stat__label">Belum terkirim</span>
+        <span class="stat__value tabular {% if sync.records_stuck %}is-warn{% endif %}">{{ belum | number }}</span>
+        <span class="stat__note">
+          sekitar {{ sync.unsent_size_bytes | bytes_human }}.
+          {% if sync.records_stuck %}{{ sync.pending_records | number }} menunggu, {{ sync.records_stuck | number }} tertahan
+          {% else %}Menunggu dikirim.{% endif %}
+        </span>
+      </div>
+    </div>
+
+    {% if persen is not none %}
+      {% set label = "%.1f" | format(persen) | replace(".", ",") ~ "%" %}
+      <div class="meter" role="img" aria-label="{{ label }} data sudah terkirim ke pusat" style="margin: var(--s4) 0 var(--s2)">
+        <span class="meter__fill" style="width: {{ persen }}%"></span>
+      </div>
+      <p class="sub">{{ label }} sudah terkirim</p>
+    {% endif %}
+
+    {% if sync.records_stuck %}
       <p class="warn">
-        {{ sync.quarantined_batches }} batch dikarantina. Datanya masih tersimpan
-        dan tidak dihapus, tetapi berhenti dicoba ulang.
+        {{ sync.records_stuck | number }} record gagal dikirim berulang kali, jadi berhenti dicoba.
+        Datanya aman di kapal dan tidak dihapus. Hubungi admin pusat untuk memeriksa penyebabnya.
       </p>
     {% endif %}
-    <a href="/sync" class="btn">Buka halaman sinkronisasi</a>
+
+    <p class="sub">
+      {% if sync.last_success_us %}Terakhir berhasil mengirim {{ sync.last_success_us | relative_us }} lalu.
+      {% else %}<strong>Belum pernah berhasil mengirim.</strong>{% endif %}
+    </p>
+    <a href="/sync" class="btn">Lihat rincian</a>
   {% endif %}
 </section>
 {% endblock %}

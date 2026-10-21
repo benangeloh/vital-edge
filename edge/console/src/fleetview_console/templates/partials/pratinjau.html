@@ -1,0 +1,33 @@
+{% if pratinjau_error %}
+  <p class="err" role="alert">Tidak bisa membaca pratinjau: {{ pratinjau_error }}</p>
+{% elif not pratinjau %}
+  {% if sensor %}
+    <p class="empty">Belum ada data tersimpan untuk sensor ini dalam satu jam terakhir.</p>
+  {% else %}
+    <p class="empty">Belum ada data tersimpan dalam satu jam terakhir.</p>
+  {% endif %}
+{% else %}
+  <table class="table">
+    <caption class="sr-only">Titik data terbaru di penyimpanan lokal</caption>
+    <thead>
+      <tr>
+        <th scope="col">Waktu</th>
+        <th scope="col">Sensor</th>
+        <th scope="col">Metrik</th>
+        <th scope="col">Field</th>
+        <th scope="col">Nilai</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for titik in pratinjau %}
+      <tr>
+        <td class="num tabular mono">{{ titik.waktu_us | relative_us }}</td>
+        <td class="mono">{{ titik.sensor_id }}</td>
+        <td>{{ titik.metric }}</td>
+        <td class="sub mono">{{ titik.field }}</td>
+        <td class="num tabular mono">{{ titik.nilai }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+{% endif %}

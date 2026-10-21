@@ -55,6 +55,49 @@
     }
   }
 
+  // Tombol Cari di formulir sensor: memperbarui hanya area hasil, dengan
+  // indikator memuat, tanpa memuat ulang halaman. Tanpa skrip ini tombolnya
+  // tetap mengirim formulir seperti biasa.
+  document.addEventListener("click", function (event) {
+    var btn = event.target.closest("[data-cari]");
+    var box = document.getElementById("hasil-cari");
+    if (!btn || !btn.form || !box || btn.disabled) return;
+    event.preventDefault();
+
+    var label = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = "Mencari\u2026";
+    box.setAttribute("aria-busy", "true");
+    box.innerHTML =
+      '<p class="busy" role="status"><span class="spinner" aria-hidden="true"></span>' +
+      "Mencari di perangkat\u2026</p>";
+
+    fetch(btn.getAttribute("formaction"), {
+      method: "POST",
+      body: new FormData(btn.form),
+      headers: { "X-Requested-With": "console" },
+    })
+      .then(function (response) {
+        if (!response.ok) throw new Error("HTTP " + response.status);
+        return response.text();
+      })
+      .then(function (html) {
+        box.innerHTML = html;
+      })
+      .catch(function (error) {
+        var note = document.createElement("p");
+        note.className = "notice notice--err";
+        note.setAttribute("role", "alert");
+        note.textContent = "Pencarian gagal. " + error.message;
+        box.replaceChildren(note);
+      })
+      .then(function () {
+        btn.disabled = false;
+        btn.textContent = label;
+        box.removeAttribute("aria-busy");
+      });
+  });
+
   if (document.readyState === "loading") {
     document.addEventListener("DOMContentLoaded", start);
   } else {

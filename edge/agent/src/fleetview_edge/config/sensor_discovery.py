@@ -30,7 +30,7 @@ def annotate(
 ) -> list[dict[str, Any]]:
     """Buang yang sudah terdaftar, tandai kemungkinan sensor, dan urutkan.
 
-    Pada LP-A104, blok UW45-UW80 adalah tempat baris salin sensor ditaruh
+    Pada LP-A104, blok UW1000-UW1099 adalah tempat baris salin sensor ditaruh
     (docs/hardware/konvensi-atlogic.md); register di luarnya kemungkinan besar
     milik panel sendiri. Itu petunjuk, bukan keputusan: teknisi yang memilih.
     """

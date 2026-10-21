@@ -18,6 +18,7 @@ sama dengan protokol sync: 4xx berarti jangan diulang, 5xx dan 429 berarti boleh
 
 from __future__ import annotations
 
+import re
 from datetime import datetime
 from typing import Any, Final
 
@@ -281,8 +282,15 @@ class InfluxTelemetryStore(TelemetryStore):
 
     # -- pratinjau ------------------------------------------------------------
 
-    async def query_recent(self, *, limit: int = 20) -> list[dict[str, Any]]:
+    async def query_recent(
+        self, *, limit: int = 20, sensor_id: str | None = None
+    ) -> list[dict[str, Any]]:
         """Titik data terbaru di bucket, untuk pratinjau di Edge Console.
+
+        `sensor_id` menyempitkan ke satu sensor. Nilainya datang dari query
+        string halaman, jadi hanya yang berbentuk id sensor biasa yang boleh
+        masuk ke Flux (string Flux menafsirkan `${...}` dan `"`); yang lain
+        dianggap sensor yang tidak ada, bukan kesalahan.
 
         Query Flux lewat HTTP langsung — alasan sama seperti tulis dan
         kesehatan: hanya butuh satu endpoint lagi, bukan client resmi yang
@@ -292,9 +300,13 @@ class InfluxTelemetryStore(TelemetryStore):
         Flux tidak selalu bisa menyatukan tabel yang skemanya berbeda menjadi
         satu urutan waktu global.
         """
+        if sensor_id is not None and not _SENSOR_ID_AMAN.fullmatch(sensor_id):
+            return []
+        saring = f' |> filter(fn: (r) => r.sensor_id == "{sensor_id}")' if sensor_id else ""
         flux = (
             f'from(bucket: "{self._bucket}")'
             " |> range(start: -1h)"
+            f"{saring}"
             " |> group()"
             ' |> sort(columns: ["_time"], desc: true)'
             f" |> limit(n: {int(limit)})"
@@ -348,6 +360,9 @@ class InfluxTelemetryStore(TelemetryStore):
         # yang tidak selalu bisa menyatukan tabel bertipe field berbeda.
         baris.sort(key=lambda r: r["waktu_us"], reverse=True)
         return baris[:limit]
+
+
+_SENSOR_ID_AMAN = re.compile(r"[A-Za-z0-9_.:\-]{1,64}")
 
 
 def _parse_annotated_csv(text: str) -> list[dict[str, str]]:

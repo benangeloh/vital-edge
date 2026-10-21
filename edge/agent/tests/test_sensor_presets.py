@@ -48,27 +48,27 @@ def _entries(*channels: str) -> list[dict[str, object]]:
 
 
 class TestAlokasiUw:
-    def test_registry_kosong_mulai_dari_uw45(self) -> None:
-        assert allocate_uw([]) == "UW45"
+    def test_registry_kosong_mulai_dari_uw1000(self) -> None:
+        assert allocate_uw([]) == "UW1000"
 
     def test_melewati_alamat_yang_terpakai(self) -> None:
-        assert allocate_uw(_entries("UW45", "UW46")) == "UW47"
+        assert allocate_uw(_entries("UW1000", "UW1001")) == "UW1002"
 
     def test_mengisi_celah_terendah_lebih_dulu(self) -> None:
-        assert allocate_uw(_entries("UW45", "UW47")) == "UW46"
+        assert allocate_uw(_entries("UW1000", "UW1002")) == "UW1001"
 
     def test_tidak_peduli_huruf_besar_dan_padding(self) -> None:
-        assert allocate_uw(_entries("uw45", "UW00046")) == "UW47"
+        assert allocate_uw(_entries("uw1000", "UW01001")) == "UW1002"
 
     def test_mengabaikan_channel_bukan_uw_dan_di_luar_blok(self) -> None:
-        assert allocate_uw(_entries("sim:me_port_rpm", "UW100", "UB1000", "UW10")) == "UW45"
+        assert allocate_uw(_entries("sim:me_port_rpm", "UW1100", "UB1000", "UW10")) == "UW1000"
 
     def test_blok_penuh_ditolak_dengan_petunjuk(self) -> None:
-        penuh = _entries(*(f"UW{n}" for n in range(45, 81)))
+        penuh = _entries(*(f"UW{n}" for n in range(1000, 1100)))
         with pytest.raises(ValidationError) as exc:
             allocate_uw(penuh)
         assert exc.value.code == "sensor.uw_penuh"
-        assert "UW100" in exc.value.message
+        assert "UW1100" in exc.value.message
 
 
 @pytest.fixture
@@ -82,7 +82,7 @@ class TestTambahDariPreset:
 
         (e,) = read_sensors(path)
         assert e["sensor_id"] == "me_rpm"
-        assert e["channel"] == "UW45"
+        assert e["channel"] == "UW1000"
         assert e["panel_source"] == "D00160"
         assert e["metric"] == "rpm"
         assert e["unit"] == "rpm"
@@ -92,7 +92,7 @@ class TestTambahDariPreset:
         add_from_preset(path, adapter="lp_a104", jenis="rpm", sensor_id="a", alamat="D160")
         add_from_preset(path, adapter="lp_a104", jenis="fw_temp", sensor_id="b", alamat="D108")
 
-        assert [e["channel"] for e in read_sensors(path)] == ["UW45", "UW46"]
+        assert [e["channel"] for e in read_sensors(path)] == ["UW1000", "UW1001"]
 
     def test_skala_preset_diterapkan(self, path: Path) -> None:
         add_from_preset(path, adapter="lp_a104", jenis="lo_press", sensor_id="lo", alamat="D110")
@@ -168,4 +168,4 @@ class TestTambahDariPreset:
 
         registry = load_sensor_registry(path)
 
-        assert registry.channels == {"UW45", "UW46"}
+        assert registry.channels == {"UW1000", "UW1001"}

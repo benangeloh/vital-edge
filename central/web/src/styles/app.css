@@ -209,7 +209,7 @@
 }
 
 /* Denyut armada: cukup untuk tahu ada masalah atau tidak, dari halaman mana pun.
-   Angka lengkapnya ada di halaman ikhtisar. */
+   Angka lengkapnya ada di halaman ringkasan. */
 .fleet-pulse {
   display: flex;
   align-items: center;

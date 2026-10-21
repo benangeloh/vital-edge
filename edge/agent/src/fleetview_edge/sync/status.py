@@ -40,3 +40,15 @@ class SyncProgress:
     last_error: str | None
     quarantined_batches: int
     """Batch yang gagal permanen. Datanya masih ada — perlu perhatian operator."""
+    acked_records: int = 0
+    """Record yang sudah dikonfirmasi pusat dan masih disimpan di kapal. Dipangkas
+    setelah `acked_grace_days`, jadi ini angka jendela waktu, bukan total seumur hidup."""
+    quarantined_records: int = 0
+    """Record di dalam batch yang dikarantina. Belum ada di pusat."""
+    acked_bytes: int = 0
+    """Perkiraan ukuran data yang sudah terkirim (gzip JSON di outbox). Sebanding
+    dengan yang lewat jaringan, tetapi bukan hitungan byte di kabel."""
+    unsent_bytes: int = 0
+    """Perkiraan ukuran data yang belum ada di pusat, termasuk yang tertahan."""
+    quarantined_bytes: int = 0
+    """Bagian dari `unsent_bytes` yang berada di batch dikarantina."""

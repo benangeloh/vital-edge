@@ -22,6 +22,7 @@ verifikasi isinya. Sekitar 2 KB JavaScript sendiri lebih kecil, dan bisa dibaca.
 
 from __future__ import annotations
 
+import hashlib
 import secrets
 from pathlib import Path
 from typing import Any
@@ -48,7 +49,7 @@ _STATIC = _HERE / "static"
 #: Urutan menu. Overview lebih dulu karena itu yang dibuka pertama saat
 #: teknisi belum tahu apa yang rusak.
 NAV = [
-    ("/", "Ikhtisar"),
+    ("/", "Ringkasan"),
     ("/sensors", "Sensor"),
     ("/sync", "Sinkronisasi"),
     ("/network", "Jaringan"),
@@ -68,6 +69,20 @@ async def _safe(coro: Any) -> tuple[Any, str | None]:
         return None, f"{exc.code}: {exc.message}"
     except Exception as exc:
         return None, str(exc)
+
+
+def asset_version(static_dir: Path) -> str:
+    """Sidik isi CSS dan JS, dipakai sebagai `?v=` di alamat aset.
+
+    Browser yang menyimpan salinan lama sebelum header `no-cache` ada tidak
+    memvalidasi ulang alamat yang sama, tetapi pasti mengambil alamat baru.
+    Jadi versi harus berasal dari ISI berkas, bukan nomor versi agent: nomor itu
+    tidak berubah saat aset diperbaiki.
+    """
+    digest = hashlib.sha256()
+    for name in ("console.css", "console.js"):
+        digest.update((static_dir / name).read_bytes())
+    return digest.hexdigest()[:10]
 
 
 def create_console_app(
@@ -90,6 +105,20 @@ def create_console_app(
     register_filters(templates.env)
     app.mount("/static", StaticFiles(directory=str(_STATIC)), name="static")
 
+    @app.middleware("http")
+    async def _validasi_ulang_aset(request: Request, call_next: Any) -> Any:
+        """CSS dan JS wajib divalidasi ulang lewat ETag di setiap pemuatan.
+
+        Tanpa header ini browser menyimpan aset berdasarkan Last-Modified secara
+        heuristik, sehingga setelah agent di-upgrade teknisi bisa mendapat
+        template baru dengan JS lama. `no-cache` bukan `no-store`: aset tetap
+        disimpan, dan di LAN kapal yang lambat yang bepergian hanya balasan 304.
+        """
+        response = await call_next(request)
+        if request.url.path.startswith("/static/"):
+            response.headers["Cache-Control"] = "no-cache"
+        return response
+
     base = {
         "ship_name": ship_name,
         "ship_id": ship_id,
@@ -99,7 +128,11 @@ def create_console_app(
     }
 
     def page(request: Request, template: str, active: str, **extra: Any) -> HTMLResponse:
-        return templates.TemplateResponse(request, template, {**base, "active": active, **extra})
+        return templates.TemplateResponse(
+            request,
+            template,
+            {**base, "active": active, "asset_v": asset_version(_STATIC), **extra},
+        )
 
     # -- Setup perangkat ----------------------------------------------------
     #
@@ -183,7 +216,7 @@ def create_console_app(
         query = urlencode({"error": pesan, "central_url": central_url, "client_id": client_id})
         return RedirectResponse(f"/setup?{query}", status_code=303)
 
-    # -- Ikhtisar -----------------------------------------------------------
+    # -- Ringkasan -----------------------------------------------------------
 
     @app.get("/", response_class=HTMLResponse)
     async def overview(request: Request) -> HTMLResponse:
@@ -274,21 +307,31 @@ def create_console_app(
         Kegagalannya menjadi pesan di formulir, bukan halaman rusak.
         """
         draft = {"jenis": jenis.strip(), "sensor_id": sensor_id.strip(), "alamat": alamat.strip()}
+        found: list[dict[str, Any]] | None = None
+        found_error: str | None = None
         finder = getattr(context, "discover_channels", None)
         if not callable(finder):
-            return await _sensor_page(
+            found_error = "Perangkat ini belum mendukung pencarian sensor."
+        else:
+            try:
+                found = await finder()
+            except FleetViewError as exc:
+                found_error = exc.message
+            except Exception as exc:
+                log.warning("console.cari_sensor_gagal", error=str(exc))
+                found_error = str(exc)
+
+        # Skrip di browser meminta hanya area hasil, supaya tombol Cari tidak
+        # memuat ulang seluruh halaman. Tanpa skrip, halaman penuh tetap dikirim.
+        if request.headers.get("x-requested-with") == "console":
+            return page(
                 request,
-                found_error="Perangkat ini belum mendukung pencarian sensor.",
-                draft=draft,
+                "partials/cari_hasil.html",
+                "/sensors",
+                found=found,
+                found_error=found_error,
             )
-        try:
-            found = await finder()
-        except FleetViewError as exc:
-            return await _sensor_page(request, found_error=exc.message, draft=draft)
-        except Exception as exc:
-            log.warning("console.cari_sensor_gagal", error=str(exc))
-            return await _sensor_page(request, found_error=str(exc), draft=draft)
-        return await _sensor_page(request, found=found, draft=draft)
+        return await _sensor_page(request, found=found, found_error=found_error, draft=draft)
 
     @app.post("/sensors/tambah")
     async def tambah_sensor(
@@ -443,8 +486,30 @@ def create_console_app(
 
     # -- Log ----------------------------------------------------------------
 
+    async def _pratinjau(sensor: str) -> tuple[list[dict[str, Any]] | None, str | None]:
+        """Titik data terbaru, opsional untuk satu sensor saja."""
+        preview_getter = getattr(context, "storage_preview", None)
+        if not callable(preview_getter):
+            return None, None
+        return await _safe(preview_getter(sensor_id=sensor or None))
+
+    @app.get("/partials/pratinjau", response_class=HTMLResponse)
+    async def pratinjau_partial(request: Request, sensor: str = "") -> HTMLResponse:
+        """Fragmen untuk penyegaran otomatis pratinjau, supaya nilainya mengikuti panel."""
+        sensor = sensor.strip()
+        pratinjau, pratinjau_error = await _pratinjau(sensor)
+        return page(
+            request,
+            "partials/pratinjau.html",
+            "/logs",
+            sensor=sensor,
+            pratinjau=pratinjau or [],
+            pratinjau_error=pratinjau_error,
+        )
+
     @app.get("/logs", response_class=HTMLResponse)
-    async def logs(request: Request, level: str | None = None) -> HTMLResponse:
+    async def logs(request: Request, level: str | None = None, sensor: str = "") -> HTMLResponse:
+        sensor = sensor.strip()
         entries, error = await _safe(context.logs(level=level, limit=200))
 
         detail_getter = getattr(context, "storage_detail", None)
@@ -452,10 +517,8 @@ def create_console_app(
             await _safe(detail_getter()) if callable(detail_getter) else (None, None)
         )
 
-        preview_getter = getattr(context, "storage_preview", None)
-        pratinjau, pratinjau_error = (
-            await _safe(preview_getter()) if callable(preview_getter) else (None, None)
-        )
+        pratinjau, pratinjau_error = await _pratinjau(sensor)
+        daftar_sensor, _ = await _safe(context.sensors())
 
         targets, targets_error = await _safe(context.export_targets())
         sync, _ = await _safe(context.sync())
@@ -471,6 +534,8 @@ def create_console_app(
             penyimpanan_error=penyimpanan_error,
             pratinjau=pratinjau or [],
             pratinjau_error=pratinjau_error,
+            sensor=sensor,
+            sensor_ids=[s.sensor_id for s in daftar_sensor or []],
             targets=targets or [],
             targets_error=targets_error,
             sync=sync,

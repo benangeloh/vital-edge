@@ -90,35 +90,26 @@
     untuk memastikan datanya benar-benar tersimpan.
   </p>
 
-  {% if pratinjau_error %}
-    <p class="err" role="alert">Tidak bisa membaca pratinjau: {{ pratinjau_error }}</p>
-  {% elif not pratinjau %}
-    <p class="empty">Belum ada data tersimpan dalam satu jam terakhir.</p>
-  {% else %}
-    <table class="table">
-      <caption class="sr-only">Titik data terbaru di penyimpanan lokal</caption>
-      <thead>
-        <tr>
-          <th scope="col">Waktu</th>
-          <th scope="col">Sensor</th>
-          <th scope="col">Metrik</th>
-          <th scope="col">Field</th>
-          <th scope="col">Nilai</th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for titik in pratinjau %}
-        <tr>
-          <td class="num tabular mono">{{ titik.waktu_us | relative_us }}</td>
-          <td class="mono">{{ titik.sensor_id }}</td>
-          <td>{{ titik.metric }}</td>
-          <td class="sub mono">{{ titik.field }}</td>
-          <td class="num tabular mono">{{ titik.nilai }}</td>
-        </tr>
-        {% endfor %}
-      </tbody>
-    </table>
+  <!-- Penyaring berupa tautan biasa seperti penyaring tingkat log di bawah:
+       bisa di-bookmark dan tetap bekerja tanpa skrip. -->
+  {% if sensor_ids %}
+  <nav class="filters" aria-label="Saring pratinjau berdasarkan sensor">
+    <a href="/logs{% if level %}?level={{ level | urlencode }}{% endif %}"
+       class="chip-link{% if not sensor %} chip-link--on{% endif %}"
+       {% if not sensor %}aria-current="true"{% endif %}>Semua sensor</a>
+    {% for sid in sensor_ids %}
+      <a href="/logs?sensor={{ sid | urlencode }}{% if level %}&amp;level={{ level | urlencode }}{% endif %}"
+         class="chip-link mono{% if sensor == sid %} chip-link--on{% endif %}"
+         {% if sensor == sid %}aria-current="true"{% endif %}>{{ sid }}</a>
+    {% endfor %}
+  </nav>
   {% endif %}
+
+  <div id="pratinjau"
+       data-refresh="/partials/pratinjau{% if sensor %}?sensor={{ sensor | urlencode }}{% endif %}"
+       data-interval="2000">
+    {% include "partials/pratinjau.html" %}
+  </div>
 </section>
 
 <section class="card">
@@ -185,7 +176,7 @@
      di-bookmark dan tetap bekerja tanpa skrip. -->
 <nav class="filters" aria-label="Saring berdasarkan tingkat">
   {% for value, label in [("", "Semua"), ("info", "Info"), ("warning", "Peringatan"), ("error", "Error")] %}
-    <a href="/logs{% if value %}?level={{ value }}{% endif %}"
+    <a href="/logs{% if value or sensor %}?{% if sensor %}sensor={{ sensor | urlencode }}{% endif %}{% if value and sensor %}&amp;{% endif %}{% if value %}level={{ value }}{% endif %}{% endif %}"
        class="chip-link{% if level == value %} chip-link--on{% endif %}"
        {% if level == value %}aria-current="true"{% endif %}>{{ label }}</a>
   {% endfor %}

@@ -9,7 +9,7 @@ import { useShip, useShipSensors, useSyncStatus, useTelemetry } from "@/lib/quer
 import { STATUS_META, shipStatus } from "@/lib/status";
 
 const TABS = [
-  "Ikhtisar",
+  "Ringkasan",
   "Telemetry Langsung",
   "Telemetry Historis",
   "Status Sync",
@@ -38,7 +38,7 @@ const PRIMARY_METRICS = [
 
 export function ShipDetail() {
   const { shipId } = useParams<{ shipId: string }>();
-  const [tab, setTab] = useState<(typeof TABS)[number]>("Ikhtisar");
+  const [tab, setTab] = useState<(typeof TABS)[number]>("Ringkasan");
   const [range, setRange] = useState(RANGES[2]!);
 
   const { data: ship, isLoading, error } = useShip(shipId);
@@ -114,9 +114,9 @@ export function ShipDetail() {
       </div>
 
       <div role="tabpanel" className="tabpanel">
-        {(tab === "Ikhtisar" || tab === "Telemetry Langsung" || tab === "Telemetry Historis") && (
+        {(tab === "Ringkasan" || tab === "Telemetry Langsung" || tab === "Telemetry Historis") && (
           <Section
-            title={tab === "Ikhtisar" ? "Telemetry utama" : tab}
+            title={tab === "Ringkasan" ? "Telemetry utama" : tab}
             actions={
               <div className="filters" role="group" aria-label="Rentang waktu">
                 {RANGES.map((r) => (
@@ -160,7 +160,7 @@ export function ShipDetail() {
           </Section>
         )}
 
-        {tab === "Ikhtisar" && (
+        {tab === "Ringkasan" && (
           <Section title="Identitas">
             <Panel>
               <dl className="fields">

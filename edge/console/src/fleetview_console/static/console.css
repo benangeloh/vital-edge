@@ -208,13 +208,6 @@ body {
 .warn { background: var(--warn-bg); color: var(--warn); }
 .empty { color: var(--muted); text-align: center; }
 
-.tree {
-  margin: 0; padding: var(--s3); overflow-x: auto;
-  background: var(--surface); border-radius: var(--radius);
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.8rem;
-  color: var(--muted);
-}
-
 /* ---------- Layar sempit ---------- */
 @media (max-width: 34rem) {
   .kv { grid-template-columns: 1fr; gap: var(--s1); }
@@ -288,8 +281,7 @@ body {
 /* Blok ladder dibedakan: isinya untuk ditempel ke perangkat lain, bukan dibaca
    sebagai status. */
 
-/* ---------- Halaman Sensor: panel instrumen yang tenang ----------
-   Hierarki dari judul bagian, jarak, dan tabel rapi, bukan dari warna. */
+/* ---------- Halaman Sensor ---------- */
 .pagehead { margin-bottom: var(--s5); }
 .pagehead .h1 { font-size: 1.75rem; margin-bottom: var(--s2); }
 .pagehead .lead { margin: 0; font-size: 0.95rem; line-height: 1.6; }
@@ -300,7 +292,7 @@ body {
 .block .card { margin-bottom: 0; }
 .muted { color: var(--muted); }
 
-/* Pesan: bilah aksen, kata kunci tebal, peran ARIA; warna bukan satu-satunya penanda. */
+/* Pesan: bilah aksen dan kata kunci, bukan warna saja. */
 .notice {
   margin: 0 0 var(--s4); padding: var(--s3) var(--s4);
   border: 1px solid var(--border); border-left-width: 4px; border-radius: var(--radius);
@@ -315,7 +307,7 @@ body {
 .nowrap { font-weight: inherit; }
 .table--registry td, .table--registry th { vertical-align: middle; }
 .table--registry tbody tr:hover { background: #fafbfa; }
-/* Wadah berposisi: sr-only di tabel bergulir tidak melebarkan halaman. */
+/* Wadah berposisi: sr-only di tabel bergulir tak melebarkan halaman. */
 .tablewrap, .card--flush { position: relative; }
 .tablewrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
 .row-actions { display: flex; gap: var(--s2); align-items: center; justify-content: flex-end; white-space: nowrap; }
@@ -376,3 +368,12 @@ body {
   .pick__tags { grid-column: 2 / -1; justify-content: flex-start; }
   .row-actions { justify-content: flex-start; }
 }
+
+/* Indikator mencari; diam bila pengguna meminta kurangi gerak. */
+.busy { display: flex; align-items: center; gap: var(--s3); margin: 0; color: var(--muted); font-size: 0.9rem; }
+.spinner {
+  width: 1.1rem; height: 1.1rem; border-radius: 50%;
+  border: 2px solid var(--border); border-top-color: var(--green-deep);
+  animation: putar 0.8s linear infinite;
+}
+@keyframes putar { to { transform: rotate(360deg); } }

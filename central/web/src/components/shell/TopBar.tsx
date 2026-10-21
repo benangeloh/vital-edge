@@ -5,7 +5,7 @@ import type { FleetSummary } from "@/lib/status";
 /** Bar atas: pencarian global, ringkasan status armada, alert, dan pengguna.
  *
  * Ringkasan di sini sengaja sangat ringkas — angka lengkapnya ada di halaman
- * ikhtisar. Yang perlu terlihat dari halaman mana pun hanyalah: apakah ada
+ * ringkasan. Yang perlu terlihat dari halaman mana pun hanyalah: apakah ada
  * sesuatu yang sedang bermasalah. */
 export function TopBar({
   summary,
@@ -15,7 +15,7 @@ export function TopBar({
   alertCount,
 }: {
   summary?: FleetSummary;
-  /** Berasal dari `needsAttention()` yang sama dengan panel di halaman ikhtisar.
+  /** Berasal dari `needsAttention()` yang sama dengan panel di halaman ringkasan.
    *  Menghitungnya ulang di sini pernah menghasilkan dua angka berbeda untuk
    *  frasa yang sama — dan itu membuat operator berhenti untuk mencocokkannya. */
   attentionCount: number;

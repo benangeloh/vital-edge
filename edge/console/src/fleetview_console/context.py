@@ -91,6 +91,19 @@ class SyncSnapshot:
     records_synced: int
     bytes_sent: int
     transports: list[dict[str, Any]] = field(default_factory=list)
+    records_acked: int = 0
+    """Record yang sudah dikonfirmasi pusat dan masih disimpan di kapal."""
+    records_stuck: int = 0
+    """Record dalam batch yang dikarantina. Belum ada di pusat."""
+    acked_size_bytes: int = 0
+    """Perkiraan ukuran data yang sudah terkirim."""
+    unsent_size_bytes: int = 0
+    """Perkiraan ukuran data yang belum ada di pusat, termasuk yang tertahan."""
+    stuck_size_bytes: int = 0
+    """Bagian dari `unsent_size_bytes` yang tertahan."""
+    acked_window_days: int = 7
+    """Berapa lama record terkirim disimpan sebelum dipangkas; menjelaskan
+    jangka waktu angka `records_acked`."""
 
 
 @dataclass(frozen=True, slots=True)

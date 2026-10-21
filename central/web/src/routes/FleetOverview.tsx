@@ -45,7 +45,7 @@ export function FleetOverview({ search }: { search: string }) {
   return (
     <>
       <div className="page-head">
-        <h1 className="page-title">Ikhtisar Armada</h1>
+        <h1 className="page-title">Ringkasan Armada</h1>
         <p className="page-sub">
           Diperbarui otomatis tiap 10 detik · {relativeTime(new Date(now).toISOString(), now)} lalu
         </p>

@@ -110,7 +110,9 @@ class AgentConsoleContext:
                 detail["tersangga"] = health.buffered_records
         return detail
 
-    async def storage_preview(self, *, limit: int = 20) -> list[dict[str, Any]]:
+    async def storage_preview(
+        self, *, limit: int = 20, sensor_id: str | None = None
+    ) -> list[dict[str, Any]]:
         """Titik data terbaru di penyimpanan lokal, untuk pratinjau di Console.
 
         Supaya teknisi tidak perlu membuka InfluxDB langsung di `:8086` hanya
@@ -121,7 +123,7 @@ class AgentConsoleContext:
         """
         if self._storage is None:
             raise NotImplementedError("penyimpanan belum dirakit — pratinjau tidak tersedia")
-        return await self._storage.query_recent(limit=limit)
+        return await self._storage.query_recent(limit=limit, sensor_id=sensor_id)
 
     def storage_password(self, pin: str) -> str:
         """Kata sandi admin InfluxDB, di balik PIN perangkat.
@@ -395,6 +397,12 @@ class AgentConsoleContext:
             records_synced=stats.records_synced,
             bytes_sent=stats.bytes_sent,
             transports=transports,
+            records_acked=progress.acked_records,
+            records_stuck=progress.quarantined_records,
+            acked_size_bytes=progress.acked_bytes,
+            unsent_size_bytes=progress.unsent_bytes,
+            stuck_size_bytes=progress.quarantined_bytes,
+            acked_window_days=self._settings.storage.acked_grace_days,
         )
 
     async def trigger_sync(self) -> str:

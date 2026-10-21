@@ -1,0 +1,27 @@
+{# Hasil pencarian sensor. Dipakai halaman penuh dan, lewat fetch, tombol Cari tanpa pindah halaman. #}
+{% if found_error %}
+  <p class="notice notice--err" role="alert"><strong>Pencarian gagal.</strong> {{ found_error }}</p>
+{% elif found is not none %}
+  {% if not found %}
+    <p class="notice">Tidak ada channel baru yang berisi nilai.</p>
+  {% else %}
+  <div class="picks" role="radiogroup" aria-label="Hasil pencarian">
+    {% for f in found %}
+    <label class="pick">
+      <input type="radio" name="channel" value="{{ f.channel }}">
+      <span class="pick__addr mono">{{ f.channel }}</span>
+      <span class="pick__val mono tabular">{{ f.value }}</span>
+      <span class="pick__tags">
+        {% if f.changing %}<span class="chip chip--ok">berubah</span>{% else %}<span class="chip chip--idle">tetap</span>{% endif %}
+        {% if f.likely_sensor %}<span class="chip chip--ok">kemungkinan sensor</span>{% else %}<span class="chip chip--idle">kemungkinan bawaan panel</span>{% endif %}
+      </span>
+    </label>
+    {% endfor %}
+  </div>
+  {% endif %}
+  <p class="step__note">
+    Yang <strong>tidak</strong> terlihat: sensor yang saat ini bernilai 0 (contoh
+    RPM saat mesin mati) dan sensor yang belum disalin ke area UW lewat ladder.
+    Arti tiap register tidak ditebak, jadi pilih jenisnya dan beri nama sendiri.
+  </p>
+{% endif %}

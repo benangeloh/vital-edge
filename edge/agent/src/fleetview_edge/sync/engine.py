@@ -295,6 +295,11 @@ class SyncEngine:
             last_success_us=self._last_success_us,
             last_error=self._last_error,
             quarantined_batches=stats.get("batches_failed", 0),
+            acked_records=stats.get("records_acked", 0),
+            quarantined_records=stats.get("quarantined_records", 0),
+            acked_bytes=stats.get("bytes_acked", 0),
+            unsent_bytes=stats.get("bytes_unsent", 0),
+            quarantined_bytes=stats.get("bytes_quarantined", 0),
         )
 
     async def snapshot(self) -> dict[str, object]:

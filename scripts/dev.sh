@@ -82,7 +82,10 @@ trap cleanup INT TERM EXIT
 
 # ------------------------------------------------------------------- prasyarat
 
-port_busy() { lsof -ti:"$1" >/dev/null 2>&1; }
+# Hanya yang sedang LISTEN. Tanpa -sTCP:LISTEN, lsof juga mencocokkan koneksi
+# klien, sehingga tab browser yang masih terhubung ke localhost:8080 membuat
+# start ulang gagal dengan "port sudah dipakai" padahal tidak ada server di sana.
+port_busy() { lsof -nP -tiTCP:"$1" -sTCP:LISTEN >/dev/null 2>&1; }
 
 need() { command -v "$1" >/dev/null 2>&1 || die "$1 belum terpasang. $2"; }
 

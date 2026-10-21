@@ -186,11 +186,13 @@ class StorageWriter:
             },
         )
 
-    async def query_recent(self, *, limit: int = 20) -> list[dict[str, Any]]:
+    async def query_recent(
+        self, *, limit: int = 20, sensor_id: str | None = None
+    ) -> list[dict[str, Any]]:
         """Titik data terbaru, diteruskan ke penyimpanan di baliknya.
 
         Tidak lewat buffer — ini jalur BACA untuk pratinjau di Console, bukan
         bagian dari jalur tulis yang tidak boleh gagal. `NotImplementedError`
         dari backend yang tidak mendukungnya dibiarkan menjalar apa adanya.
         """
-        return await self._store.query_recent(limit=limit)
+        return await self._store.query_recent(limit=limit, sensor_id=sensor_id)

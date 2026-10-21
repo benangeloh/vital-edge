@@ -231,16 +231,16 @@ def ladder_lines(entries: list[dict[str, Any]]) -> str:
     return keluaran
 
 
-#: Blok UW yang sudah dipastikan bebas dan bisa dibaca lewat Modbus pada panel
-#: ini (docs/hardware/konvensi-atlogic.md). Di atas UW81 belum pernah diverifikasi.
-UW_FREE_FIRST = 45
-UW_FREE_LAST = 80
+#: Blok UW tujuan baris salin sensor. Autonics mewajibkan MOV ke UW mulai dari
+#: UW1000 (USER AREA); UW0-UW99 milik panel sendiri dan tidak boleh dipakai.
+UW_FREE_FIRST = 1000
+UW_FREE_LAST = 1099
 
 _D_ADDRESS = re.compile(r"^D(\d{1,5})$")
 
 
 def allocate_uw(entries: list[dict[str, Any]]) -> str:
-    """Alamat UW bebas terendah di blok UW45-UW80.
+    """Alamat UW bebas terendah di blok UW1000-UW1099.
 
     Teknisi tidak perlu tahu area UW itu ada: ia memberi tahu alamat D tempat
     nilai berada, dan sistem memilih tujuannya.
@@ -255,7 +255,7 @@ def allocate_uw(entries: list[dict[str, Any]]) -> str:
             return f"UW{nomor}"
     raise ValidationError(
         f"blok UW{UW_FREE_FIRST}-UW{UW_FREE_LAST} sudah penuh. Untuk sensor tambahan, uji satu "
-        "alamat di atas UW100 lebih dulu dengan angka tetap sebelum dipakai",
+        "alamat di atas UW1100 lebih dulu dengan angka tetap sebelum dipakai",
         code="sensor.uw_penuh",
     )
 

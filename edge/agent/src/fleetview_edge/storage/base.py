@@ -130,8 +130,12 @@ class TelemetryStore(abc.ABC):
     async def close(self) -> None:
         """Lepaskan sumber daya. Idempoten, tidak melempar."""
 
-    async def query_recent(self, *, limit: int = 20) -> list[dict[str, Any]]:
+    async def query_recent(
+        self, *, limit: int = 20, sensor_id: str | None = None
+    ) -> list[dict[str, Any]]:
         """Titik data terbaru, untuk pratinjau di Edge Console.
+
+        `sensor_id` (opsional) menyempitkan hasil ke satu sensor.
 
         Bukan bagian dari kontrak inti (tulis + kesehatan) — default tidak
         didukung. Backend yang bisa membacanya kembali (InfluxDB) meng-override
