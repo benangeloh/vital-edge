@@ -21,11 +21,15 @@ Keduanya memakai `shared/` (format wire, logging, error, waktu) — lihat
 [shared/README.md](shared/README.md) — supaya format data tidak pernah
 menyimpang antara kapal dan pusat meski di-deploy terpisah.
 
+**Panduan lengkap dari nol: [Deploy central, tambah kapal, pasang di kapal](docs/panduan/README.md).**
+Mulai dari sana bila belum pernah memasang sistem ini.
+
 Satu hal yang perlu diketahui sebelum instalasi Edge di kapal sungguhan:
-**jalur baca dari LP-A104 belum terkonfirmasi** — lihat
-[status hardware](docs/hardware/LP-A104.md). Sampai itu beres, provisioning
-Raspberry Pi tetap bisa dijalankan, tapi akuisisi sensor memakai adapter
-simulator, bukan hardware sungguhan.
+panel LP-A hanya bisa dibaca lewat area `UW`, jadi tiap sensor butuh baris
+salin `MOV` di program panel. Lihat
+[SOP panel LP-A](docs/operations/10-sop-panel-lp-a.md) dan
+[status hardware](docs/hardware/LP-A104.md). Kapal tanpa alamat panel berjalan
+dalam mode simulasi, dan datanya **bukan** data asli.
 
 ## Mulai cepat (development — simulasi KEDUA sistem di satu mesin)
 
