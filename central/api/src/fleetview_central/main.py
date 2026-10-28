@@ -26,6 +26,7 @@ from fleetview_central.modules.ops import router as ops_router
 from fleetview_central.modules.telemetry import router as telemetry_router
 from fleetview_central.platform.db import Database
 from fleetview_central.platform.influx import InfluxGateway
+from fleetview_central.platform.secretbox import SecretBox
 from fleetview_central.platform.security import TokenService
 from fleetview_central.settings import ApiSettings, load_settings
 from fleetview_central.version import API_VERSION
@@ -65,6 +66,12 @@ def create_app(settings: ApiSettings | None = None) -> FastAPI:
         app.state.tokens = TokenService(
             settings.jwt_secret or "dev-only-secret", ttl_seconds=settings.jwt_ttl_seconds
         )
+        app.state.secretbox = SecretBox(settings.credential_key or None)
+        if not app.state.secretbox.enabled:
+            log.warning(
+                "api.credential_key_missing",
+                effect="kredensial kapal baru tidak bisa dibuka lagi dari dashboard",
+            )
         try:
             yield
         finally:

@@ -65,18 +65,15 @@ export function FleetOverview({ search }: { search: string }) {
         </div>
         <div className="updated" role="status">
           <span className="updated__text">
-            <span className="updated__label">Terakhir diperbarui</span>
+            Diperbarui{" "}
             <span className="updated__time tabular">
               {dataUpdatedAt
-                ? new Date(dataUpdatedAt).toLocaleString("id-ID", {
-                    day: "2-digit",
-                    month: "short",
-                    year: "numeric",
+                ? new Date(dataUpdatedAt).toLocaleTimeString("id-ID", {
                     hour: "2-digit",
                     minute: "2-digit",
                     second: "2-digit",
                   })
-                : "Belum ada"}
+                : "belum ada"}
             </span>
           </span>
           <button

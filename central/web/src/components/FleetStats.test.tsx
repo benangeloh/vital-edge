@@ -15,26 +15,35 @@ function renderStats(over: Partial<React.ComponentProps<typeof FleetStats>> = {}
 }
 
 describe("FleetStats", () => {
-  it("satu kartu untuk total dan satu untuk tiap status", () => {
+  it("satu tombol untuk total dan satu untuk tiap status", () => {
     renderStats();
     for (const name of ["Total kapal", "Online", "Sinkron", "Terganggu", "Offline", "Nonaktif"]) {
       expect(screen.getByRole("button", { name: new RegExp(name) })).toBeInTheDocument();
     }
   });
 
-  it("menampilkan jumlah dan persentase dari total", () => {
+  it("menampilkan jumlah dan persentase dari total, ringkas", () => {
     renderStats();
     const sinkron = screen.getByRole("button", { name: /Sinkron/ });
     expect(within(sinkron).getByText("1")).toBeInTheDocument();
-    expect(within(sinkron).getByText("14% dari total")).toBeInTheDocument();
+    expect(within(sinkron).getByText("14%")).toBeInTheDocument();
     const offline = screen.getByRole("button", { name: /Offline/ });
-    expect(within(offline).getByText("86% dari total")).toBeInTheDocument();
+    expect(within(offline).getByText("86%")).toBeInTheDocument();
   });
 
-  it("setiap kartu status menjelaskan artinya", () => {
+  it("arti tiap status ada di tooltip, tidak memenuhi layar", () => {
     renderStats();
     const offline = screen.getByRole("button", { name: /Offline/ });
-    expect(within(offline).getByText(/lebih dari satu jam/i)).toBeInTheDocument();
+    expect(offline).toHaveAttribute("title", expect.stringMatching(/lebih dari satu jam/i));
+    expect(within(offline).queryByText(/lebih dari satu jam/i)).not.toBeInTheDocument();
+  });
+
+  it("tanpa ikon dan tanpa meteran per status", () => {
+    const { container } = render(
+      <FleetStats summary={summary} selected="all" onSelect={() => {}} />,
+    );
+    expect(container.querySelector("svg")).toBeNull();
+    expect(container.querySelector(".stat__meter")).toBeNull();
   });
 
   it("menekan kartu menyaring daftar, menekan lagi membatalkan", async () => {
@@ -75,6 +84,6 @@ describe("FleetStats", () => {
       />,
     );
     expect(container.textContent).not.toContain("NaN");
-    expect(screen.getAllByText("0% dari total").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("0%").length).toBeGreaterThan(0);
   });
 });

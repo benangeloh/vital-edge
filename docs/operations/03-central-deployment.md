@@ -129,10 +129,19 @@ sudo tee /etc/fleetview/secrets.env >/dev/null <<ENV
 FLEETVIEW_POSTGRES_DSN=postgresql+asyncpg://fleetview:$(sudo cat /etc/fleetview/secrets/postgres_password.txt)@postgres:5432/fleetview
 FLEETVIEW_INFLUX_TOKEN=$(sudo cat /etc/fleetview/secrets/influx_token.txt)
 FLEETVIEW_JWT_SECRET=$(openssl rand -hex 32)
+FLEETVIEW_CREDENTIAL_KEY=$(openssl rand -base64 32 | tr '+/' '-_')
 ENV
 sudo chmod 0600 /etc/fleetview/secrets.env
 sudo chown root:fleetview /etc/fleetview/secrets.env
 ```
+
+**`FLEETVIEW_CREDENTIAL_KEY`** mengenkripsi rahasia kredensial kapal supaya skrip
+pasang bisa diunduh ulang dari dashboard dengan kredensial yang sama. Buat sekali
+dan **jangan diganti**: kunci yang berubah atau hilang membuat kredensial
+tersimpan tidak terbaca (kapal yang sudah terpasang tetap bisa login; hanya
+skripnya yang tidak bisa dibuka lagi, dan harus diterbitkan ulang). Berkas ini
+tidak ikut dicadangkan, jadi simpan salinan kuncinya di penyimpan rahasia tim.
+Kosong berarti fitur itu mati dan kredensial baru hanya tampil sekali.
 
 `FLEETVIEW_POSTGRES_DSN` dan `FLEETVIEW_INFLUX_TOKEN` di atas **mengambil nilai
 dari** `/etc/fleetview/secrets/postgres_password.txt` dan `influx_token.txt` —

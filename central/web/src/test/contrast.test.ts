@@ -36,7 +36,7 @@ describe("kontras teks utama (WCAG AA: 4.5:1)", () => {
     ["teks di atas surface", TEXT, SURFACE],
     ["teks redup di atas putih", TEXT_MUTED, WHITE],
     ["teks redup di atas surface", TEXT_MUTED, SURFACE],
-    ["teks putih di atas hijau pekat (sidebar)", WHITE, GREEN_DEEP],
+    ["teks putih di atas hijau pekat (tombol bahaya dan banner)", WHITE, GREEN_DEEP],
   ])("%s", (_name, fg, bg) => {
     expect(ratio(fg, bg)).toBeGreaterThanOrEqual(4.5);
   });

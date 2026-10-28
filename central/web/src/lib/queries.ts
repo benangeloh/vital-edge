@@ -135,8 +135,12 @@ export interface OnboardResult {
   name: string;
   device_id: string;
   client_id: string;
-  /** Hanya dikembalikan sekali, saat penerbitan. Tidak pernah bisa dibaca ulang. */
+  /** Rahasia kredensial. Server menyimpannya terenkripsi bila `recoverable`;
+   *  selain itu hanya muncul sekali, saat penerbitan. */
   client_secret: string;
+  /** Bisa dibuka lagi dari daftar kapal. Kosong dianggap tidak bisa, supaya
+   *  peringatan "hanya tampil sekali" tidak pernah keliru ke arah yang berbahaya. */
+  recoverable?: boolean;
 }
 
 export interface OnboardInput {
@@ -152,6 +156,68 @@ export function useOnboardShip() {
   return useMutation({
     mutationFn: async (input: OnboardInput) =>
       (await api.post<OnboardResult>("/api/v1/ships/onboard", input)).data,
+    onSuccess: () => client.invalidateQueries({ queryKey: ["fleet"] }),
+  });
+}
+
+export interface CurrentUser {
+  user_id: string;
+  username: string;
+  roles: string[];
+}
+
+export function useMe() {
+  return useQuery({
+    queryKey: ["me"],
+    queryFn: async () => (await api.get<CurrentUser>("/api/v1/auth/me")).data,
+    staleTime: 5 * 60_000,
+  });
+}
+
+/** Membuka kredensial kapal yang sudah terdaftar.
+ *
+ *  Tidak disimpan di cache setelah dialognya ditutup: ini rahasia, dan tidak ada
+ *  alasan membiarkannya hidup di memori halaman lebih lama dari yang diperlukan. */
+export function useShipCredential(shipId: string) {
+  return useQuery({
+    queryKey: ["ship-credential", shipId],
+    queryFn: async () => (await api.get<OnboardResult>(`/api/v1/ships/${shipId}/credential`)).data,
+    gcTime: 0,
+    staleTime: 0,
+    retry: false,
+  });
+}
+
+export function useIssueShipCredential(shipId: string) {
+  return useMutation({
+    mutationFn: async () =>
+      (await api.post<OnboardResult>(`/api/v1/ships/${shipId}/credential`)).data,
+    gcTime: 0,
+  });
+}
+
+export interface UpdateShipInput {
+  name: string;
+  /** Kosong berarti menghapus nomor IMO. */
+  imo_number: string;
+}
+
+export function useUpdateShip(shipId: string) {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: UpdateShipInput) =>
+      (await api.patch(`/api/v1/ships/${shipId}`, input)).data,
+    onSuccess: () => {
+      client.invalidateQueries({ queryKey: ["fleet"] });
+      client.invalidateQueries({ queryKey: ["ship", shipId] });
+    },
+  });
+}
+
+export function useDecommissionShip(shipId: string) {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: async () => (await api.post(`/api/v1/ships/${shipId}/decommission`)).data,
     onSuccess: () => client.invalidateQueries({ queryKey: ["fleet"] }),
   });
 }

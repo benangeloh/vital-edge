@@ -1,9 +1,19 @@
 import { Link } from "react-router-dom";
+import { RowMenu } from "./ui/RowMenu";
 import { StatusBadge } from "./ui/StatusBadge";
 import { absoluteTime, compactNumber, relativeTime, staleness } from "@/lib/format";
 import { conditionPhrase } from "@/lib/narrative";
 import { STATUS_META, shipStatus } from "@/lib/status";
 import type { FleetShip } from "@/lib/types";
+
+/** Aksi mengelola satu kapal. Bila tidak diberikan, tabel hanya menampilkan
+ *  tautan ke detail: pemakai tanpa hak mengelola tidak melihat tombol yang pasti
+ *  ditolak server. */
+export interface ShipActions {
+  onCredential: (ship: FleetShip) => void;
+  onEdit: (ship: FleetShip) => void;
+  onDecommission: (ship: FleetShip) => void;
+}
 
 /** Tabel armada.
  *
@@ -15,10 +25,12 @@ export function ShipTable({
   ships,
   now = Date.now(),
   dense = false,
+  actions,
 }: {
   ships: FleetShip[];
   now?: number;
   dense?: boolean;
+  actions?: ShipActions;
 }) {
   return (
     <div className="table-wrap">
@@ -78,13 +90,32 @@ export function ShipTable({
                   )}
                 </td>
                 <td className="table__action">
-                  <Link
-                    to={`/ships/${ship.ship_id}`}
-                    className="btn btn--outline btn--small"
-                    aria-label={`Lihat detail ${ship.name}`}
-                  >
-                    Lihat detail
-                  </Link>
+                  <div className="table__actions">
+                    <Link
+                      to={`/ships/${ship.ship_id}`}
+                      className="btn btn--outline btn--small"
+                      aria-label={`Lihat detail ${ship.name}`}
+                    >
+                      Lihat detail
+                    </Link>
+                    {actions && (
+                      <RowMenu
+                        label={`Aksi lainnya untuk ${ship.name}`}
+                        items={[
+                          {
+                            label: "Kredensial & skrip pasang",
+                            onSelect: () => actions.onCredential(ship),
+                          },
+                          { label: "Edit data kapal", onSelect: () => actions.onEdit(ship) },
+                          {
+                            label: "Nonaktifkan kapal",
+                            danger: true,
+                            onSelect: () => actions.onDecommission(ship),
+                          },
+                        ]}
+                      />
+                    )}
+                  </div>
                 </td>
               </tr>
             );

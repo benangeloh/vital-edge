@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import hashlib
 import secrets
+from dataclasses import asdict
 from pathlib import Path
 from typing import Any
 from urllib.parse import quote, urlencode, urlsplit
@@ -619,9 +620,11 @@ def create_console_app(
         return JSONResponse(
             {
                 "ok": system_error is None and sync_error is None,
+                # asdict, bukan __dict__: snapshot memakai slots=True sehingga
+                # tidak punya __dict__, dan endpoint ini selalu gagal 500.
                 "data": {
-                    "system": system.__dict__ if system else None,
-                    "sync": sync.__dict__ if sync else None,
+                    "system": asdict(system) if system else None,
+                    "sync": asdict(sync) if sync else None,
                 },
                 "error": system_error or sync_error,
                 "meta": {},

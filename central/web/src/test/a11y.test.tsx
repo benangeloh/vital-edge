@@ -6,7 +6,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { FleetStats } from "@/components/FleetStats";
 import { OnboardShipDialog } from "@/components/OnboardShipDialog";
 import { ShipTable } from "@/components/ShipTable";
-import { Sidebar } from "@/components/shell/Sidebar";
+import { TopBar } from "@/components/shell/TopBar";
 import { makeShip, minutesAgo } from "./factories";
 import { summarise } from "@/lib/status";
 
@@ -68,10 +68,15 @@ describe("aksesibilitas", () => {
     expect(violations.map((v) => `${v.id}: ${v.help}`)).toEqual([]);
   });
 
-  it("navigasi tanpa pelanggaran", async () => {
+  it("bilah atas dan navigasi tanpa pelanggaran", async () => {
     const violations = await checkA11y(
       <MemoryRouter>
-        <Sidebar collapsed={false} onToggleCollapsed={() => {}} />
+        <TopBar
+          summary={{ total: 3, online: 1, syncing: 0, degraded: 0, offline: 2, inactive: 0, pendingRecords: 0 }}
+          attentionCount={2}
+          search=""
+          onSearch={() => {}}
+        />
       </MemoryRouter>,
     );
     expect(violations.map((v) => `${v.id}: ${v.help}`)).toEqual([]);

@@ -62,6 +62,34 @@ class TestSemuaHalaman:
         assert client.get("/docs").status_code == 404
 
 
+class TestApiStatus:
+    """Ringkasan mesin-terbaca untuk skrip pemeliharaan."""
+
+    def test_menjawab_dengan_ringkasan_sistem_dan_sinkronisasi(self, client: TestClient) -> None:
+        response = client.get("/api/status")
+        assert response.status_code == 200
+
+        body = response.json()
+        assert body["ok"] is True
+        assert body["error"] is None
+        assert body["data"]["system"]["ship_name"] == "KM Sinar Jaya"
+        assert body["data"]["sync"]["pending_records"] == 18_400
+        assert isinstance(body["data"]["sync"]["transports"], list)
+
+    def test_bagian_yang_rusak_tidak_menjatuhkan_bagian_lain(
+        self, make_context: Callable[..., Any]
+    ) -> None:
+        """Skrip pemeliharaan dijalankan justru saat ada yang rusak."""
+        response = make_client(make_context(fail={"sync"})).get("/api/status")
+        assert response.status_code == 200
+
+        body = response.json()
+        assert body["ok"] is False
+        assert "sync tidak tersedia" in body["error"]
+        assert body["data"]["sync"] is None
+        assert body["data"]["system"]["ship_name"] == "KM Sinar Jaya"
+
+
 class TestTetapTampilSaatRusak:
     """Satu komponen rusak tidak boleh menjatuhkan halaman."""
 

@@ -24,6 +24,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from fleetview_central.main import create_app
 from fleetview_central.platform.db import Base, Database
 from fleetview_central.platform.influx import InfluxGateway
+from fleetview_central.platform.secretbox import SecretBox
 from fleetview_central.platform.security import TokenService
 from fleetview_central.settings import ApiSettings
 
@@ -33,6 +34,8 @@ POSTGRES_DSN = os.getenv(
 )
 INFLUX_URL = os.getenv("FLEETVIEW_TEST_INFLUX_URL", "http://localhost:8086")
 INFLUX_TOKEN = os.getenv("FLEETVIEW_TEST_INFLUX_TOKEN", "fleetview-dev-token")
+#: Kunci Fernet khusus uji. Bukan rahasia: hanya mengenkripsi data buatan test.
+CREDENTIAL_KEY = "Zm9yLXRlc3Qtb25seS1mbGVldHZpZXctZGV2LWtleSE="
 
 
 async def _services_up() -> bool:
@@ -114,6 +117,7 @@ async def client(database: Database, influx: InfluxGateway, tokens: TokenService
     app.state.database = database
     app.state.influx = influx
     app.state.tokens = tokens
+    app.state.secretbox = SecretBox(CREDENTIAL_KEY)
 
     transport = httpx.ASGITransport(app=app)
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as c:

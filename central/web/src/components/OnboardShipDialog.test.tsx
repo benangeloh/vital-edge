@@ -168,6 +168,17 @@ describe("OnboardShipDialog", () => {
     );
   });
 
+  it("bila server menyimpan salinan terenkripsi, memberi tahu bahwa kredensial bisa dibuka lagi", async () => {
+    mockFetch(201, { ok: true, data: { ...HASIL, recoverable: true }, error: null, meta: {} });
+    renderDialog();
+    await isiDanKirim();
+
+    await screen.findByText(/Pasang otomatis/);
+    expect(screen.queryByText(/hanya ditampilkan sekali/i)).not.toBeInTheDocument();
+    expect(screen.getByText(/bisa dibuka lagi dari daftar kapal/i)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Selesai" })).toBeEnabled();
+  });
+
   it("menahan tombol Selesai sampai kredensial diakui tersalin", async () => {
     mockFetch(201, { ok: true, data: HASIL, error: null, meta: {} });
     renderDialog();

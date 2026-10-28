@@ -26,6 +26,7 @@ from fleetview_central.modules.fleet.service import FleetService
 from fleetview_central.modules.identity.models import DeviceCredential, User
 from fleetview_central.modules.identity.service import IdentityService
 from fleetview_central.platform.db import Database
+from fleetview_central.platform.secretbox import SecretBox
 from fleetview_central.platform.security import TokenService
 from fleetview_central.settings import ApiSettings, load_settings
 from fleetview_common import ConfigError
@@ -155,7 +156,11 @@ async def _credential_issue(s: ApiSettings, args: argparse.Namespace) -> int:
         # 32 byte dari token_urlsafe, bukan kata sandi yang dipilih manusia:
         # kredensial ini tidak pernah diketik, hanya disalin ke secrets.env.
         secret = secrets.token_urlsafe(32)
-        identity = IdentityService(session, TokenService(s.jwt_secret or "cli", ttl_seconds=60))
+        identity = IdentityService(
+            session,
+            TokenService(s.jwt_secret or "cli", ttl_seconds=60),
+            SecretBox(s.credential_key or None),
+        )
         await identity.create_device_credential(
             device_id=device.id,
             ship_id=device.ship_id,

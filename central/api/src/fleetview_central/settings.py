@@ -43,6 +43,13 @@ class ApiSettings(BaseSettings):
     """Kosong hanya boleh saat pengembangan. Diverifikasi ada di produksi."""
     jwt_ttl_seconds: int = Field(default=3600, gt=0)
 
+    credential_key: str = ""
+    """Kunci Fernet untuk menyimpan rahasia kredensial kapal secara terenkripsi,
+    supaya admin bisa mengunduh ulang skrip pasang dengan kredensial yang sama.
+    Kosong berarti fitur itu mati: kredensial baru hanya disimpan sebagai hash.
+    Buat dengan `openssl rand -base64 32 | tr '+/' '-_'` dan simpan cadangannya
+    terpisah; kunci yang hilang membuat rahasia tersimpan tidak terbaca."""
+
     cors_origins: list[str] = Field(default_factory=list)
     """Origin dashboard. Sengaja kosong secara default — daftar yang terlalu
     longgar adalah cara paling mudah membocorkan API internal."""

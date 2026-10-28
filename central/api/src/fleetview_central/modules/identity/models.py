@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime
 from uuid import UUID, uuid4
 
-from sqlalchemy import Boolean, Column, DateTime, ForeignKey, String, Table, func
+from sqlalchemy import Boolean, Column, DateTime, ForeignKey, String, Table, Text, func
 from sqlalchemy.dialects.postgresql import UUID as PgUUID  # noqa: N811
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -70,6 +70,10 @@ class DeviceCredential(Base):
     ship_id: Mapped[UUID] = mapped_column(PgUUID(as_uuid=True), index=True)
     client_id: Mapped[str] = mapped_column(String(64), unique=True, index=True)
     secret_hash: Mapped[str] = mapped_column(String(256))
+    secret_encrypted: Mapped[str | None] = mapped_column(Text)
+    """Salinan terenkripsi (Fernet) supaya skrip pasang bisa diunduh ulang.
+    `None` untuk kredensial yang dibuat sebelum fitur ini atau saat
+    `credential_key` kosong; hanya hash-nya yang ada, jadi tidak bisa dibuka."""
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     last_used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

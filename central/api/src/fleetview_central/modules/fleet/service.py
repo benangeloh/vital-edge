@@ -25,7 +25,12 @@ class FleetService:
         self._db = session
 
     async def list_ships(
-        self, *, query: str | None = None, limit: int = 100, offset: int = 0
+        self,
+        *,
+        query: str | None = None,
+        limit: int = 100,
+        offset: int = 0,
+        include_inactive: bool = False,
     ) -> list[dict[str, Any]]:
         """Tampilan armada.
 
@@ -43,6 +48,10 @@ class FleetService:
         )
         if query:
             stmt = stmt.where(Ship.name.ilike(f"%{query}%"))
+        if not include_inactive:
+            # Kapal yang sudah dinonaktifkan harus keluar dari tampilan armada,
+            # kalau tidak ia selamanya tampil "offline" dan menambah kebisingan.
+            stmt = stmt.where(Ship.is_active.is_(True))
 
         rows = await self._db.execute(stmt)
         now = now_utc()
@@ -93,6 +102,47 @@ class FleetService:
         self._db.add(ShipSyncState(ship_id=ship.id))
         await self._db.flush()
         return ship
+
+    async def update_ship(self, ship_id: UUID, changes: dict[str, Any]) -> Ship:
+        """Ubah nama dan nomor IMO. Kode kapal (`slug`) sengaja tidak bisa diubah:
+        ia dipakai sebagai nama folder ekspor USB dan pengenal di ledger."""
+        ship = await self.get_ship(ship_id)
+        if "name" in changes:
+            ship.name = changes["name"]
+        if "imo_number" in changes:
+            imo = (changes["imo_number"] or "").strip() or None
+            if imo is not None:
+                taken = await self._db.scalar(
+                    select(Ship.id).where(Ship.imo_number == imo, Ship.id != ship_id)
+                )
+                if taken is not None:
+                    raise ValidationError(
+                        f"nomor IMO {imo!r} sudah dipakai kapal lain",
+                        code="fleet.imo_taken",
+                        details={"imo_number": imo},
+                    )
+            ship.imo_number = imo
+        await self._db.flush()
+        return ship
+
+    async def decommission_ship(self, ship_id: UUID) -> Ship:
+        """Tandai kapal tidak aktif. Barisnya tidak dihapus: ledger batch dan
+        telemetry merujuk padanya (docs/operations/08-ship-decommissioning.md)."""
+        ship = await self.get_ship(ship_id)
+        ship.is_active = False
+        await self._db.flush()
+        return ship
+
+    async def primary_device(self, ship_id: UUID) -> Device:
+        """Perangkat Edge yang dipakai kapal ini. Onboarding selalu membuat satu."""
+        devices = [d for d in await self.list_devices(ship_id) if d.is_active]
+        if not devices:
+            raise ValidationError(
+                "kapal ini belum punya perangkat aktif",
+                code="fleet.no_device",
+                details={"ship_id": str(ship_id)},
+            )
+        return devices[0]
 
     async def ship_by_slug(self, slug: str) -> Ship | None:
         """Slug adalah nama direktori paket export USB dan pengenal yang dipakai

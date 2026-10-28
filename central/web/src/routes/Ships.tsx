@@ -1,17 +1,34 @@
 import { useEffect, useMemo, useState } from "react";
+import { DecommissionShipDialog } from "@/components/DecommissionShipDialog";
+import { EditShipDialog } from "@/components/EditShipDialog";
 import { OnboardShipDialog } from "@/components/OnboardShipDialog";
 import { PAGE_SIZE, Pager } from "@/components/Pager";
-import { ShipTable } from "@/components/ShipTable";
+import { ShipCredentialDialog } from "@/components/ShipCredentialDialog";
+import { ShipTable, type ShipActions } from "@/components/ShipTable";
 import { ErrorState, Loading, Section } from "@/components/ui/Primitives";
-import { useFleet } from "@/lib/queries";
+import { canManageFleet } from "@/lib/permissions";
+import { useFleet, useMe } from "@/lib/queries";
 import { sortShips } from "@/lib/status";
+import type { FleetShip } from "@/lib/types";
+
+type ManageDialog = { kind: "credential" | "edit" | "decommission"; ship: FleetShip };
 
 /** Daftar kapal dan tempat menambah kapal baru. */
 export function ShipsPage({ search }: { search: string }) {
   const { data: ships, isLoading, error, refetch } = useFleet();
+  const { data: me } = useMe();
   const [onboarding, setOnboarding] = useState(false);
+  const [managing, setManaging] = useState<ManageDialog | null>(null);
   const [page, setPage] = useState(0);
   const now = Date.now();
+
+  const actions: ShipActions | undefined = canManageFleet(me?.roles)
+    ? {
+        onCredential: (ship) => setManaging({ kind: "credential", ship }),
+        onEdit: (ship) => setManaging({ kind: "edit", ship }),
+        onDecommission: (ship) => setManaging({ kind: "decommission", ship }),
+      }
+    : undefined;
 
   const filtered = useMemo(() => {
     const needle = search.trim().toLowerCase();
@@ -50,9 +67,18 @@ export function ShipsPage({ search }: { search: string }) {
         </button>
       </div>
       <Section title="Daftar kapal">
-        <ShipTable ships={visible} now={now} />
+        <ShipTable ships={visible} now={now} actions={actions} />
         <Pager page={current} total={filtered.length} onPage={setPage} />
       </Section>
+      {managing?.kind === "credential" && (
+        <ShipCredentialDialog ship={managing.ship} onClose={() => setManaging(null)} />
+      )}
+      {managing?.kind === "edit" && (
+        <EditShipDialog ship={managing.ship} onClose={() => setManaging(null)} />
+      )}
+      {managing?.kind === "decommission" && (
+        <DecommissionShipDialog ship={managing.ship} onClose={() => setManaging(null)} />
+      )}
       {onboarding && (
         <OnboardShipDialog
           onClose={() => setOnboarding(false)}

@@ -1,7 +1,6 @@
-import { Suspense, lazy, useEffect, useState } from "react";
+import { Suspense, lazy, useState } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
-import { Sidebar } from "@/components/shell/Sidebar";
 import { TopBar } from "@/components/shell/TopBar";
 import { FleetOverview } from "@/routes/FleetOverview";
 import { Login } from "@/routes/Login";
@@ -34,64 +33,39 @@ const client = new QueryClient({
   },
 });
 
-const SIDEBAR_COLLAPSED_KEY = "fleetview.sidebarCollapsed";
-
-function readSidebarCollapsed(): boolean {
-  try {
-    return localStorage.getItem(SIDEBAR_COLLAPSED_KEY) === "1";
-  } catch {
-    return false;
-  }
-}
-
 function Shell() {
   const [search, setSearch] = useState("");
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(readSidebarCollapsed);
   const { data: ships } = useFleet();
-
-  useEffect(() => {
-    try {
-      localStorage.setItem(SIDEBAR_COLLAPSED_KEY, sidebarCollapsed ? "1" : "0");
-    } catch {
-      // Preferensi tampilan saja — aman diabaikan kalau storage tidak tersedia.
-    }
-  }, [sidebarCollapsed]);
 
   const summary = ships ? summarise(ships) : undefined;
   const attentionCount = ships ? needsAttention(ships).length : 0;
 
   return (
-    <div className={sidebarCollapsed ? "app app--sidebar-collapsed" : "app"}>
+    <div className="app">
       <a href="#main" className="skip-link">
         Lompat ke konten utama
       </a>
-      <Sidebar
-        collapsed={sidebarCollapsed}
-        onToggleCollapsed={() => setSidebarCollapsed((c) => !c)}
+      <TopBar
+        summary={summary}
+        attentionCount={attentionCount}
+        search={search}
+        onSearch={setSearch}
       />
-      <div className="app__body">
-        <TopBar
-          summary={summary}
-          attentionCount={attentionCount}
-          search={search}
-          onSearch={setSearch}
-        />
-        <main id="main" className="content" tabIndex={-1}>
-          <Routes>
-            <Route path="/" element={<FleetOverview search={search} />} />
-            <Route path="/ships" element={<ShipsPage search={search} />} />
-            <Route
-              path="/ships/:shipId"
-              element={
-                <Suspense fallback={<div className="loading">Memuat kapal…</div>}>
-                  <ShipDetail />
-                </Suspense>
-              }
-            />
-            <Route path="*" element={<Navigate to="/" replace />} />
-          </Routes>
-        </main>
-      </div>
+      <main id="main" className="content" tabIndex={-1}>
+        <Routes>
+          <Route path="/" element={<FleetOverview search={search} />} />
+          <Route path="/ships" element={<ShipsPage search={search} />} />
+          <Route
+            path="/ships/:shipId"
+            element={
+              <Suspense fallback={<div className="loading">Memuat kapal…</div>}>
+                <ShipDetail />
+              </Suspense>
+            }
+          />
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
+      </main>
     </div>
   );
 }

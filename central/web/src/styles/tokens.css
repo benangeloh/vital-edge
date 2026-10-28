@@ -12,6 +12,9 @@
   /* Netral — ini yang paling banyak dipakai. Dashboard tidak berwarna hijau;
      hijau hanya muncul di shell navigasi, aksi utama, dan status sehat. */
   --white: #ffffff;
+  /* Latar halaman: nyaris putih, supaya kartu putih dipisahkan garis tipis,
+     bukan blok warna. */
+  --canvas: #f7f8f7;
   --surface: #eef2ef;
   --border: #d9e1dc;
   --text: #12211c;
@@ -80,9 +83,10 @@
   --duration: 150ms;
   --ease: cubic-bezier(0.16, 1, 0.3, 1);
 
-  --sidebar-width: 17rem;
-  --sidebar-width-collapsed: 3.5rem;
-  --topbar-height: 4.5rem;
+  --topbar-height: 3.75rem;
+  /* Satu kolom konten di tengah. Tabel yang dibentangkan selebar layar membuat
+     mata kehilangan baris saat bergerak dari nama kapal ke kolom statusnya. */
+  --content-width: 80rem;
 }
 
 *,
@@ -99,7 +103,7 @@ body,
 
 body {
   margin: 0;
-  background: var(--surface);
+  background: var(--canvas);
   color: var(--text);
   font-family: var(--font-sans);
   font-size: var(--text-base);

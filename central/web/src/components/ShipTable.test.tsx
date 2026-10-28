@@ -1,6 +1,7 @@
 import { render, screen, within } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
-import { describe, expect, it } from "vitest";
+import userEvent from "@testing-library/user-event";
+import { describe, expect, it, vi } from "vitest";
 import { ShipTable } from "./ShipTable";
 import { makeShip, minutesAgo } from "@/test/factories";
 
@@ -67,5 +68,67 @@ describe("ShipTable", () => {
   it("tabel punya caption untuk pembaca layar", () => {
     renderTable();
     expect(screen.getByRole("table", { name: /Daftar kapal beserta status/ })).toBeInTheDocument();
+  });
+
+  describe("menu aksi kapal", () => {
+    const actions = () => ({
+      onCredential: vi.fn(),
+      onEdit: vi.fn(),
+      onDecommission: vi.fn(),
+    });
+
+    function renderWithActions(a = actions(), ships = [makeShip()]) {
+      render(
+        <MemoryRouter>
+          <ShipTable ships={ships} actions={a} />
+        </MemoryRouter>,
+      );
+      return a;
+    }
+
+    it("tidak tampil bila pemakai tidak boleh mengelola", () => {
+      renderTable();
+      expect(screen.queryByRole("button", { name: /Aksi lainnya/ })).not.toBeInTheDocument();
+    });
+
+    it("hanya satu tombol menu per baris, bukan deretan tombol", () => {
+      renderWithActions();
+      expect(screen.getByRole("button", { name: "Aksi lainnya untuk KM Sinar Jaya" })).toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: /^Edit/ })).not.toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: /^Nonaktifkan/ })).not.toBeInTheDocument();
+    });
+
+    it("menu memuat kredensial, edit, dan nonaktifkan", async () => {
+      renderWithActions();
+      await userEvent.setup().click(screen.getByRole("button", { name: "Aksi lainnya untuk KM Sinar Jaya" }));
+      expect(screen.getAllByRole("menuitem").map((i) => i.textContent)).toEqual([
+        "Kredensial & skrip pasang",
+        "Edit data kapal",
+        "Nonaktifkan kapal",
+      ]);
+    });
+
+    it("memanggil aksi dengan kapal pada barisnya", async () => {
+      const kapal = makeShip({ ship_id: "22222222-2222-2222-2222-222222222222", name: "KM Dua" });
+      const a = renderWithActions(actions(), [makeShip(), kapal]);
+      const user = userEvent.setup();
+      const buka = () => user.click(screen.getByRole("button", { name: "Aksi lainnya untuk KM Dua" }));
+
+      await buka();
+      await user.click(screen.getByRole("menuitem", { name: "Edit data kapal" }));
+      await buka();
+      await user.click(screen.getByRole("menuitem", { name: "Kredensial & skrip pasang" }));
+      await buka();
+      await user.click(screen.getByRole("menuitem", { name: "Nonaktifkan kapal" }));
+
+      expect(a.onEdit).toHaveBeenCalledWith(kapal);
+      expect(a.onCredential).toHaveBeenCalledWith(kapal);
+      expect(a.onDecommission).toHaveBeenCalledWith(kapal);
+    });
+
+    it("tautan Lihat detail tetap ada", () => {
+      renderWithActions();
+      expect(screen.getByRole("link", { name: "Lihat detail KM Sinar Jaya" })).toBeInTheDocument();
+    });
   });
 });

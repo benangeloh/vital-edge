@@ -8,8 +8,9 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from fleetview_central.modules.identity.models import DeviceCredential, Role, User
+from fleetview_central.platform.secretbox import SecretBox
 from fleetview_central.platform.security import TokenService, hash_secret, verify_secret
-from fleetview_common import AuthError, get_logger, now_utc
+from fleetview_common import AuthError, ValidationError, get_logger, now_utc
 
 __all__ = ["IdentityService"]
 
@@ -17,9 +18,15 @@ log = get_logger(__name__)
 
 
 class IdentityService:
-    def __init__(self, session: AsyncSession, tokens: TokenService) -> None:
+    def __init__(
+        self,
+        session: AsyncSession,
+        tokens: TokenService,
+        secretbox: SecretBox | None = None,
+    ) -> None:
         self._db = session
         self._tokens = tokens
+        self._secretbox = secretbox
 
     async def authenticate_user(self, username: str, password: str) -> str:
         user = await self._db.scalar(select(User).where(User.username == username))
@@ -82,6 +89,13 @@ class IdentityService:
             ship_id=ship_id,
             client_id=client_id,
             secret_hash=hash_secret(secret),
+            # Salinan terenkripsi hanya dibuat bila kuncinya ada. Tanpa itu
+            # perilakunya sama seperti sebelum fitur ini: hash saja.
+            secret_encrypted=(
+                self._secretbox.encrypt(secret)
+                if self._secretbox is not None and self._secretbox.enabled
+                else None
+            ),
         )
         self._db.add(cred)
         await self._db.flush()
@@ -106,6 +120,66 @@ class IdentityService:
             .order_by(DeviceCredential.created_at.desc())
         )
         return list(rows.scalars().all())
+
+    @property
+    def can_recover(self) -> bool:
+        """Apakah kredensial yang diterbitkan sekarang bisa dibuka lagi nanti."""
+        return self._secretbox is not None and self._secretbox.enabled
+
+    async def active_credential(self, device_id: UUID) -> DeviceCredential | None:
+        """Kredensial aktif terbaru sebuah perangkat, atau `None`."""
+        rows = await self._db.execute(
+            select(DeviceCredential)
+            .where(
+                DeviceCredential.device_id == device_id,
+                DeviceCredential.is_active.is_(True),
+                DeviceCredential.revoked_at.is_(None),
+            )
+            .order_by(DeviceCredential.created_at.desc())
+            .limit(1)
+        )
+        return rows.scalar_one_or_none()
+
+    def reveal_secret(self, cred: DeviceCredential) -> str:
+        """Rahasia asli sebuah kredensial, untuk skrip pasang.
+
+        Hanya kredensial yang dibuat saat `credential_key` terisi yang punya
+        salinan terenkripsi. Sisanya hanya punya hash dan tidak bisa dipulihkan;
+        jawabannya dibuat jelas supaya dashboard bisa menawarkan penerbitan ulang.
+        """
+        if cred.secret_encrypted is None:
+            raise ValidationError(
+                "rahasia kredensial ini tidak tersimpan (dibuat sebelum fitur ini). "
+                "Terbitkan kredensial baru.",
+                code="fleet.credential_not_recoverable",
+                details={"client_id": cred.client_id},
+            )
+        if self._secretbox is None:
+            raise ValidationError(
+                "kunci enkripsi tidak tersedia di server",
+                code="fleet.credential_unreadable",
+            )
+        return self._secretbox.decrypt(cred.secret_encrypted)
+
+    async def revoke_all_for_ship(self, ship_id: UUID) -> list[str]:
+        """Cabut semua kredensial aktif sebuah kapal; kembalikan client_id-nya.
+
+        Dipakai saat kapal dinonaktifkan. Barisnya ditandai, tidak dihapus,
+        alasannya sama dengan `revoke_device_credential`.
+        """
+        rows = await self._db.scalars(
+            select(DeviceCredential).where(
+                DeviceCredential.ship_id == ship_id, DeviceCredential.revoked_at.is_(None)
+            )
+        )
+        revoked: list[str] = []
+        now = now_utc()
+        for cred in rows:
+            cred.is_active = False
+            cred.revoked_at = now
+            revoked.append(cred.client_id)
+        await self._db.flush()
+        return revoked
 
     async def revoke_device_credential(self, client_id: str) -> DeviceCredential | None:
         """Cabut kredensial sebuah perangkat.

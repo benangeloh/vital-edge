@@ -43,7 +43,8 @@ hampir sepenuhnya dicadangkan untuk menyatakan status.
 ## Aturan
 
 1. **Hijau bukan warna halamannya.** Latar halaman adalah putih dan `--surface`. Hijau muncul
-   di shell navigasi, tombol aksi utama, dan indikator status sehat. Card berwarna putih
+   di penanda halaman aktif pada bilah atas, tombol aksi utama, dan indikator status sehat.
+   Navigasi berupa satu bilah atas, bukan rel samping: aplikasi ini hanya punya dua modul. Card berwarna putih
    dengan border 1px `--border`, tidak pernah bersemu hijau.
 2. **Merah berarti "bertindak sekarang."** Alert kritis, konfirmasi destruktif, tanda brand.
    Tidak pernah untuk "offline" — kapal yang offline itu wajar (justru itu premis seluruh

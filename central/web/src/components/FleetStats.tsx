@@ -1,5 +1,3 @@
-import { ShipIcon } from "@/components/shell/nav-icons";
-import { StatusIcon } from "@/components/ui/StatusIcon";
 import { boardHeadline } from "@/lib/narrative";
 import {
   STATUS_MEANING,
@@ -9,12 +7,12 @@ import {
   type ShipStatus,
 } from "@/lib/status";
 
-/** Ringkasan armada: kartu status yang juga berfungsi sebagai penyaring daftar,
- *  dan satu batang proporsi untuk "seberapa sehat armada ini".
+/** Ringkasan armada: satu kalimat jawaban, lalu satu pita angka yang juga
+ *  berfungsi sebagai penyaring daftar, dengan garis proporsi di dasarnya.
  *
- *  Kartu, bukan deretan kotak per kapal: dengan 100 kapal kotak-kotak itu
- *  menutupi halaman, sedangkan angka dan persentase tetap sama terbacanya
- *  untuk 7 maupun 700 kapal. */
+ *  Pita, bukan deretan kartu: angka dan persentase sama terbacanya untuk 7
+ *  maupun 700 kapal, dan hanya angkanya yang tampil. Arti tiap status ada di
+ *  tooltip, bukan di setiap sel. */
 export interface FleetStatsProps {
   summary: FleetSummary;
   selected: ShipStatus | "all";
@@ -36,57 +34,48 @@ export function FleetStats({ summary, selected, onSelect }: FleetStatsProps) {
 
   return (
     <section className="stats" aria-label="Ringkasan status armada">
-      <div className="stats__cards" role="group" aria-label="Saring daftar kapal menurut status">
-        <button
-          type="button"
-          className={`stat stat--total${selected === "all" ? " stat--on" : ""}`}
-          aria-pressed={selected === "all"}
-          onClick={() => onSelect("all")}
-        >
-          <span className="stat__top">
-            <span className="stat__icon">
-              <ShipIcon className="stat__svg" />
-            </span>
+      <h2 className="stats__headline">
+        <span className="tabular">{headline.count}</span> {headline.rest}
+      </h2>
+      <p className="stats__note">{headline.note}</p>
+
+      <div className="stats__panel">
+        <div className="stats__strip" role="group" aria-label="Saring daftar kapal menurut status">
+          <button
+            type="button"
+            className={`stat stat--total${selected === "all" ? " stat--on" : ""}`}
+            aria-pressed={selected === "all"}
+            title="Semua kapal terdaftar"
+            onClick={() => onSelect("all")}
+          >
             <span className="stat__label">Total kapal</span>
-          </span>
-          <span className="stat__count tabular">{summary.total}</span>
-          <span className="stat__foot">Semua kapal terdaftar</span>
-        </button>
+            <span className="stat__count tabular">{summary.total}</span>
+            <span className="stat__share">Semua</span>
+          </button>
 
-        {STATUS_ORDER.map((status) => {
-          const meta = STATUS_META[status];
-          const share = percent(summary[status], summary.total);
-          const active = selected === status;
-          return (
-            <button
-              key={status}
-              type="button"
-              className={`stat stat--${meta.tone}${active ? " stat--on" : ""}`}
-              aria-pressed={active}
-              onClick={() => onSelect(active ? "all" : status)}
-            >
-              <span className="stat__top">
-                <span className="stat__icon">
-                  <StatusIcon status={status} className="stat__svg" />
+          {STATUS_ORDER.map((status) => {
+            const meta = STATUS_META[status];
+            const active = selected === status;
+            return (
+              <button
+                key={status}
+                type="button"
+                className={`stat stat--${meta.tone}${active ? " stat--on" : ""}`}
+                aria-pressed={active}
+                title={STATUS_MEANING[status]}
+                onClick={() => onSelect(active ? "all" : status)}
+              >
+                <span className="stat__label">
+                  <span className="stat__dot" aria-hidden="true" />
+                  {meta.label}
                 </span>
-                <span className="stat__label">{meta.label}</span>
-              </span>
-              <span className="stat__count tabular">{summary[status]}</span>
-              <span className="stat__share tabular">{share}% dari total</span>
-              <span className="stat__meter" aria-hidden="true">
-                <span className="stat__fill" style={{ width: `${share}%` }} />
-              </span>
-              <span className="stat__meaning">{STATUS_MEANING[status]}</span>
-            </button>
-          );
-        })}
-      </div>
+                <span className="stat__count tabular">{summary[status]}</span>
+                <span className="stat__share tabular">{percent(summary[status], summary.total)}%</span>
+              </button>
+            );
+          })}
+        </div>
 
-      <div className="perf">
-        <h2 className="perf__headline">
-          <span className="perf__count tabular">{headline.count}</span> {headline.rest}
-        </h2>
-        <p className="perf__note">{headline.note}</p>
         <div
           className="perf__bar"
           role="img"
@@ -104,18 +93,6 @@ export function FleetStats({ summary, selected, onSelect }: FleetStatsProps) {
             />
           ))}
         </div>
-        <ul className="perf__legend">
-          {STATUS_ORDER.map((status) => (
-            <li key={status} className="perf__item">
-              <span
-                className={`perf__key perf__key--${STATUS_META[status].tone}`}
-                aria-hidden="true"
-              />
-              <span>{STATUS_META[status].label}</span>
-              <strong className="tabular">{summary[status]}</strong>
-            </li>
-          ))}
-        </ul>
       </div>
     </section>
   );
